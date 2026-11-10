@@ -1,0 +1,49 @@
+# Costruisce la versione browser e la pubblica su GitHub Pages.
+name: Pubblica il sito
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  costruisci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Installa wasm-bindgen alla versione di Cargo.lock
+        run: |
+          versione=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$versione" --locked
+      - name: Compila
+        run: cargo build --release -p colossi --target wasm32-unknown-unknown
+      - name: Prepara il sito
+        run: |
+          wasm-bindgen --target web --no-typescript --out-dir web/pkg target/wasm32-unknown-unknown/release/colossi.wasm
+          rm web/costruisci.ps1
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  pubblica:
+    needs: costruisci
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

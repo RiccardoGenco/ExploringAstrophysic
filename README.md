@@ -5,6 +5,9 @@ Laboratorio di fisica per far percepire i grandi oggetti dell'universo a chi non
 (scala, buco nero, gemelli, perché cadiamo, cosa curva, stelle di neutroni, giganti,
 osservatorio sui dati reali, tre corpi, galassie, onde, fondo cosmico, stelle, orizzonte).
 
+Si prova nel browser, senza scaricare nulla (serve WebGPU):
+https://riccardogenco.github.io/ExploringAstrophysic/
+
 ```
 cargo run -p colossi
 cargo test --workspace
