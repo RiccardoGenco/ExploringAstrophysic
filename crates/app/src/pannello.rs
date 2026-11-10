@@ -700,13 +700,14 @@ mod prove {
         s.giro();
         s.giro();
         // La parte alta della prima scheda porta al primo banco dei colossi.
-        for y in (120..300).step_by(10) {
+        for y in (330..900).step_by(10) {
             clic(&mut s, 300.0, y as f32);
             if s.stato.stanza != Stanza::Benvenuto {
                 break;
             }
         }
         assert!(s.stato.stanza == Stanza::Scala, "non si e' entrati");
+        assert!(s.stato.visita.is_none(), "si e' entrati da una visita e non da una scheda");
         clic(&mut s, 40.0, 22.0);
         assert!(s.stato.stanza == Stanza::Benvenuto, "il nome in alto riporta all'inizio");
     }
