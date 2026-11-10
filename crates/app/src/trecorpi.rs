@@ -897,7 +897,8 @@ fn cielo(ui: &mut egui::Ui, c: &TreCorpi, pianeta: usize) {
 fn strumenti(ui: &mut egui::Ui, c: &mut TreCorpi) {
     ui.horizontal(|ui| {
         ui.selectable_value(&mut c.pagina, Pagina::Banco, RichText::new("Banco").strong());
-        ui.selectable_value(&mut c.pagina, Pagina::Mappa, RichText::new("Mappa del caos").strong());
+        let scheda_mappa = ui.selectable_value(&mut c.pagina, Pagina::Mappa, RichText::new("Mappa del caos").strong());
+        crate::visite::segna(ui, "mappa", &scheda_mappa);
     });
     ui.label(RichText::new(&c.nome).size(16.0).strong().color(CIANO));
 
@@ -984,7 +985,8 @@ fn strumenti(ui: &mut egui::Ui, c: &mut TreCorpi) {
 
     titoletto(ui, "CAOS");
     let prima = (c.caos, c.log_soffio);
-    ui.checkbox(&mut c.caos, "Un gemello che parte quasi uguale");
+    let gemello = ui.checkbox(&mut c.caos, "Un gemello che parte quasi uguale");
+    crate::visite::segna(ui, "gemello", &gemello);
     if c.caos {
         ui.add(egui::Slider::new(&mut c.log_soffio, -12.0..=-1.0).text("differenza, 10 alla").fixed_decimals(0));
     }

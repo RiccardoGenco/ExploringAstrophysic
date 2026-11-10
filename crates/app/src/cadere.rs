@@ -166,6 +166,7 @@ pub fn mostra(ui: &mut egui::Ui, c: &mut Cadere) {
         });
     egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
+        crate::visite::segna_rect(ui.ctx(), "scena", area);
         grafico(ui, area, c);
     });
 }
@@ -209,7 +210,8 @@ fn strumenti(ui: &mut egui::Ui, c: &mut Cadere) {
 
     titoletto(ui, "PROVA");
     ui.horizontal(|ui| {
-        ui.toggle_value(&mut c.natura, "Lascia fare alla natura");
+        let natura = ui.toggle_value(&mut c.natura, "Lascia fare alla natura");
+        crate::visite::segna(ui, "natura", &natura);
         ui.toggle_value(&mut c.soluzione, "Mostra la caduta libera");
     });
     ui.horizontal(|ui| {

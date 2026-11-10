@@ -190,6 +190,12 @@ pub fn guida(stanza: Stanza) -> Option<&'static Guida> {
     })
 }
 
+/// Vero se la sfida e' riuscita adesso, a prescindere da quelle spuntate in passato.
+/// Serve alle visite guidate, che vogliono vedere il gesto fatto ora.
+pub fn sfida_ora(s: &Stato, stanza: Stanza, i: usize) -> bool {
+    guida(stanza).and_then(|g| g.sfide.get(i)).is_some_and(|sfida| (sfida.fatta)(s))
+}
+
 /// Segna le sfide appena riuscite. Una volta fatte restano fatte.
 pub fn controlla(s: &mut Stato) {
     let Some(g) = guida(s.stanza) else { return };

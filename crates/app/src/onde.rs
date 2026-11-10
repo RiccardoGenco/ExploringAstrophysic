@@ -289,7 +289,9 @@ fn strumenti(ui: &mut egui::Ui, b: &mut BancoOnde) {
     }
 
     ui.add_space(4.0);
-    if ui.button(RichText::new("Ascolta il segnale").strong()).clicked() {
+    let ascolta = ui.button(RichText::new("Ascolta il segnale").strong());
+    crate::visite::segna(ui, "ascolta", &ascolta);
+    if ascolta.clicked() {
         b.suona();
     }
     if let Some(e) = &b.avviso {

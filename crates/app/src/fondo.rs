@@ -15,7 +15,7 @@ const LARGHEZZA: f32 = 430.0;
 const LATO_X: usize = 720;
 const LATO_Y: usize = 360;
 const N_FOTONI: usize = 420;
-const Z_MASSIMO: f64 = 6000.0;
+pub const Z_MASSIMO: f64 = 6000.0;
 const DIPOLO_UK: f64 = 3362.0;
 const DIPOLO_L: f64 = 264.0;
 const DIPOLO_B: f64 = 48.25;
@@ -156,7 +156,7 @@ fn visibilita(t: f64) -> f32 {
 pub struct BancoFondo {
     pub pagina: Pagina,
     pub z: f64,
-    in_corso: bool,
+    pub in_corso: bool,
     fotoni: Vec<Fotone>,
     caso: Casuale,
     pub cosmo: Cosmologia,
@@ -662,7 +662,9 @@ fn strumenti(ui: &mut egui::Ui, b: &mut BancoFondo) {
 fn col_nebbia(ui: &mut egui::Ui, b: &mut BancoFondo) {
     titoletto(ui, "QUANDO");
     ui.horizontal(|ui| {
-        if ui.button(if b.in_corso { "Pausa" } else { "Scorri" }).clicked() {
+        let scorri = ui.button(if b.in_corso { "Pausa" } else { "Scorri" });
+        crate::visite::segna(ui, "scorri", &scorri);
+        if scorri.clicked() {
             b.in_corso = !b.in_corso;
         }
         if ui.button("Dall'inizio").clicked() {
@@ -720,7 +722,8 @@ fn col_macchie(ui: &mut egui::Ui, b: &mut BancoFondo) {
     titoletto(ui, "DI COSA È FATTO L'UNIVERSO");
     ui.add(egui::Slider::new(&mut b.cosmo.barioni_h2, 0.005..=0.06).text("materia normale").fixed_decimals(4));
     ui.add(egui::Slider::new(&mut b.cosmo.oscura_h2, 0.03..=0.3).text("materia oscura").fixed_decimals(3));
-    ui.add(egui::Slider::new(&mut b.cosmo.curvatura, -0.3..=0.3).text("curvatura dello spazio").fixed_decimals(3));
+    let curvatura = ui.add(egui::Slider::new(&mut b.cosmo.curvatura, -0.3..=0.3).text("curvatura dello spazio").fixed_decimals(3));
+    crate::visite::segna(ui, "curvatura", &curvatura);
     if ui.small_button("Torna ai valori misurati").clicked() {
         b.cosmo = PLANCK;
     }

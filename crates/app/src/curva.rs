@@ -77,6 +77,7 @@ pub fn mostra(ui: &mut egui::Ui, c: &mut Curva) {
         });
     egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
+        crate::visite::segna_rect(ui.ctx(), "scena", area);
         mappa(ui, area, c);
     });
 }

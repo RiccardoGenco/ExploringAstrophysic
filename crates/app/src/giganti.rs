@@ -189,6 +189,7 @@ fn grafico(ui: &mut egui::Ui, area: Rect, g: &mut Giganti) {
 
     // Seme e istante osservato.
     let seme = a_schermo(piano, g.t_seme, g.massa_seme.log10());
+    crate::visite::segna_rect(ui.ctx(), "seme", Rect::from_center_size(seme, Vec2::splat(36.0)));
     p.circle_filled(seme, 8.0, ARANCIO);
     p.circle_stroke(seme, 12.0, Stroke::new(1.2, CHIARO));
     p.text(seme + Vec2::new(14.0, 8.0), Align2::LEFT_TOP, "seme: trascinami", FontId::proportional(11.5), CHIARO);

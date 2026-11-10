@@ -60,9 +60,9 @@ pub fn barra_tempo(
 /// Disegna il banco aperto. Restituisce l'area del telescopio, se c'e', in punti.
 pub fn mostra(ui: &mut egui::Ui, s: &mut Stato, fps: f32) -> Option<Rect> {
     egui::Panel::top("barra").exact_size(ALTEZZA_BARRA).frame(cornice()).show(ui, |ui| barra(ui, s, fps));
-    visite::mostra(ui.ctx(), s);
+    visite::mostra(ui, s);
     guida::pannello(ui, s);
-    match s.stanza {
+    let area = match s.stanza {
         Stanza::Benvenuto => {
             benvenuto::mostra(ui, s);
             None
@@ -125,7 +125,9 @@ pub fn mostra(ui: &mut egui::Ui, s: &mut Stato, fps: f32) -> Option<Rect> {
             }
             None
         }
-    }
+    };
+    visite::evidenzia(ui.ctx(), s);
+    area
 }
 
 /// Se il banco chiede di aprire un buco nero, ci si sposta su quello.
@@ -180,6 +182,7 @@ fn buco_nero(ui: &mut egui::Ui, s: &mut Stato) -> Rect {
         if s.telescopio_grande {
             telescopio = vista_telescopio(ui, area, s);
         } else {
+            visite::segna_rect(ui.ctx(), "banco", area);
             banco::mostra(ui, area, s);
         }
     });
@@ -318,7 +321,8 @@ fn barra_buco_nero(ui: &mut egui::Ui, s: &mut Stato) {
         ui.label(RichText::new("Gravità").color(GRIGIO));
         let prima = (s.lab.legge, s.lab.confronta);
         ui.selectable_value(&mut s.lab.legge, Legge::Einstein, "Einstein");
-        ui.selectable_value(&mut s.lab.legge, Legge::Newton, "Newton");
+        let newton = ui.selectable_value(&mut s.lab.legge, Legge::Newton, "Newton");
+        visite::segna(ui, "newton", &newton);
         ui.checkbox(&mut s.lab.confronta, "Confronta le due");
         if prima != (s.lab.legge, s.lab.confronta) {
             s.lab.rilancia_tutti();
@@ -372,7 +376,8 @@ fn orologi(ui: &mut egui::Ui, s: &mut Stato) {
         ui.label(RichText::new("Comanda l'orologio").color(GRIGIO));
         let prima = lab.orologio;
         ui.selectable_value(&mut lab.orologio, Orologio::Lontano, "di chi guarda");
-        ui.selectable_value(&mut lab.orologio, Orologio::Proprio, "di ciascuno");
+        let di_ciascuno = ui.selectable_value(&mut lab.orologio, Orologio::Proprio, "di ciascuno");
+        visite::segna(ui, "di_ciascuno", &di_ciascuno);
         if prima != lab.orologio {
             lab.ricomincia();
         }
@@ -469,6 +474,7 @@ fn icona(p: &egui::Painter, c: Pos2, strumento: Strumento, colore: Color32) {
 
 fn vista_telescopio(ui: &mut egui::Ui, area: Rect, s: &mut Stato) -> Rect {
     let risposta = ui.interact(area, ui.id().with("telescopio"), Sense::drag());
+    visite::segna_rect(ui.ctx(), "telescopio", area);
     let delta = risposta.drag_delta();
     s.azimut -= f64::from(delta.x) * 0.006;
     s.elevazione = (s.elevazione + f64::from(delta.y) * 0.006).clamp(-1.5, 1.5);

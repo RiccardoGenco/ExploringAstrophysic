@@ -86,9 +86,13 @@ fn contenuto(ui: &mut egui::Ui, s: &mut Stato) {
             );
             ui.label(RichText::new("Non servono formule. Ogni cosa che vedi è calcolata, e ogni banco ti dice cosa provare.").size(15.0).color(GRIGIO));
             ui.add_space(22.0);
+            visite_in_evidenza(ui, s, larghezza - 32.0);
+            ui.add_space(26.0);
+            ui.label(RichText::new("Oppure scegli un banco").size(19.0).strong().color(CHIARO));
+            ui.add_space(8.0);
             schede(ui, s, larghezza - 32.0);
             ui.add_space(26.0);
-            visite_e_consigli(ui, s);
+            consigli(ui);
             ui.add_space(30.0);
         });
     });
@@ -143,24 +147,51 @@ fn rect_testa(r: Rect) -> Rect {
     Rect::from_min_max(r.min, Pos2::new(r.max.x, r.min.y + 140.0))
 }
 
-fn visite_e_consigli(ui: &mut egui::Ui, s: &mut Stato) {
-    ui.label(RichText::new("Non sai da dove partire?").size(19.0).strong().color(CHIARO));
-    ui.label(RichText::new("Una visita guidata ti porta da un banco all'altro e ti dice cosa guardare.").color(GRIGIO));
+/// Le visite guidate in cima: sono il modo piu' facile per cominciare.
+fn visite_in_evidenza(ui: &mut egui::Ui, s: &mut Stato, larghezza: f32) {
+    ui.label(RichText::new("Comincia da qui").size(19.0).strong().color(CHIARO));
+    ui.label(RichText::new("Una visita ti fa provare le cose davvero: ti indica il comando e va avanti quando ci riesci.").color(GRIGIO));
     ui.add_space(8.0);
+    let colonne = if larghezza > 900.0 { 3 } else { 1 };
+    let w = (larghezza - SPAZIO * (colonne as f32 - 1.0)) / colonne as f32;
     let mut scelta = None;
-    ui.horizontal_wrapped(|ui| {
-        for (i, v) in visite::VISITE.iter().enumerate() {
-            let testo = RichText::new(format!("{}  ·  {}", v.nome, v.durata)).size(15.0).strong();
-            if ui.add(egui::Button::new(testo).min_size(Vec2::new(250.0, 40.0))).clicked() {
-                scelta = Some(i);
-            }
-            ui.add_space(8.0);
+    ui.horizontal_top(|ui| {
+        for (i, v) in visite::VISITE.iter().enumerate().take(colonne) {
+            visita_scheda(ui, v, w, &mut scelta, i);
+            ui.add_space(SPAZIO);
         }
     });
+    if colonne == 1 {
+        for (i, v) in visite::VISITE.iter().enumerate().skip(1) {
+            ui.add_space(SPAZIO);
+            visita_scheda(ui, v, w, &mut scelta, i);
+        }
+    }
     if let Some(i) = scelta {
         visite::inizia(s, i);
     }
+}
 
+fn visita_scheda(ui: &mut egui::Ui, v: &visite::Visita, w: f32, scelta: &mut Option<usize>, i: usize) {
+    Frame::new()
+        .fill(SUPERFICIE)
+        .stroke(Stroke::new(1.0, CIANO.gamma_multiply(0.6)))
+        .corner_radius(10)
+        .inner_margin(Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(w - 30.0);
+            ui.set_min_height(120.0);
+            ui.label(RichText::new(v.durata.to_uppercase()).small().strong().color(GRIGIO));
+            ui.label(RichText::new(v.nome).size(19.0).strong().color(CIANO));
+            ui.add(egui::Label::new(RichText::new(v.descrizione).color(CHIARO)).wrap());
+            ui.add_space(8.0);
+            if ui.add(egui::Button::new(RichText::new("Comincia").strong()).min_size(Vec2::new(120.0, 32.0))).clicked() {
+                *scelta = Some(i);
+            }
+        });
+}
+
+fn consigli(ui: &mut egui::Ui) {
     ui.add_space(22.0);
     ui.label(RichText::new("Come si usa").size(19.0).strong().color(CHIARO));
     ui.add_space(6.0);

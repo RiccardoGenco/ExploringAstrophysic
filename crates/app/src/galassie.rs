@@ -226,7 +226,9 @@ fn strumenti(ui: &mut egui::Ui, g: &mut BancoGalassie) {
 
     titoletto(ui, "MATERIA OSCURA");
     let mut acceso = g.sim.fattore_alone > 0.0;
-    if ui.checkbox(&mut acceso, "Accesa").changed() {
+    let accesa = ui.checkbox(&mut acceso, "Accesa");
+    crate::visite::segna(ui, "alone", &accesa);
+    if accesa.changed() {
         g.sim.fattore_alone = if acceso { 1.0 } else { 0.0 };
     }
     ui.add(egui::Slider::new(&mut g.sim.fattore_alone, 0.0..=3.0).text("quantità, rispetto al vero").fixed_decimals(2));

@@ -277,7 +277,9 @@ pub fn mostra(ui: &mut egui::Ui, s: &mut Stato) {
 fn barra(ui: &mut egui::Ui, s: &mut Scala) {
     ui.horizontal_centered(|ui| {
         let etichetta = if s.viaggio { "Ferma" } else { "Viaggia verso il grande" };
-        if ui.add_sized([180.0, 30.0], egui::Button::new(RichText::new(etichetta).strong())).clicked() {
+        let viaggia = ui.add_sized([180.0, 30.0], egui::Button::new(RichText::new(etichetta).strong()));
+        crate::visite::segna(ui, "viaggia", &viaggia);
+        if viaggia.clicked() {
             s.viaggio = !s.viaggio;
             s.verso = None;
         }
