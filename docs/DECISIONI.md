@@ -46,3 +46,8 @@
   di Planck e basta alla risoluzione mostrata. Sostituisce la simulazione per default.
 - **D25. Le missioni condividono struttura e calcolo.** Cambiano dati, modello e parametri.
 - **D26. Vita delle stelle con relazioni di scala**, non un modello stellare: lo dichiara il banco.
+- **D27. Pubblico: adulti curiosi.** Linguaggio semplice, numeri spiegati, dettagli su richiesta.
+- **D28. Si entra da una pagina di benvenuto e i banchi stanno in quattro aree**, le
+  stesse della visione, invece di una fila di quattordici schede.
+- **D29. Ogni banco ha una guida con piccole sfide che si spuntano da sole** leggendo lo
+  stato del banco. Nessun punteggio: servono a indicare cosa vale la pena provare.

@@ -121,6 +121,14 @@ impl Cadere {
     }
 }
 
+/// Quanto il percorso disegnato si avvicina al tempo massimo possibile.
+pub fn frazione_del_massimo(c: &Cadere) -> f64 {
+    let dt = c.dt();
+    let (q, v) = scarto_orologio(&c.h, dt, c.g);
+    let (ql, vl) = scarto_orologio(&c.libera(), dt, c.g);
+    (q - v) / (ql - vl).max(1e-40)
+}
+
 /// Tempi piccolissimi con l'unita' adatta.
 fn minuscolo(s: f64) -> String {
     let a = s.abs();

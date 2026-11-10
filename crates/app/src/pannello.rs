@@ -2,8 +2,8 @@
 
 use crate::formato::{densita, grande, lunghezza, tempo};
 use crate::lab::{Strumento, ESPERIMENTI};
-use crate::stato::{Stanza, Stato, PRESET, R_CAM_MAX, R_CAM_MIN};
-use crate::{banco, cadere, curva, fondo, galassie, gemelli, giganti, neutroni, onde, orizzonte, osservatorio, scala, stelle, strumenti, trecorpi, visite};
+use crate::stato::{Stanza, Stato, AREE, PRESET, R_CAM_MAX, R_CAM_MIN};
+use crate::{banco, benvenuto, cadere, curva, fondo, galassie, gemelli, giganti, neutroni, onde, orizzonte, osservatorio, scala, stelle, strumenti, guida, trecorpi, visite};
 use colossi_fisica::costanti::UA;
 use colossi_fisica::buco_nero::ISCO;
 use colossi_fisica::geodetica::{Legge, Orologio};
@@ -23,7 +23,7 @@ const LARGHEZZA_COLONNA: f32 = 450.0;
 const QUOTA_MINIATURA: f32 = 0.40;
 const ALTEZZA_BARRA: f32 = 44.0;
 /// Sotto questa larghezza le schede diventano un menu.
-const LARGHEZZA_SCHEDE: f32 = 1180.0;
+const LARGHEZZA_SCHEDE: f32 = 760.0;
 const ALTEZZA_COMANDI: f32 = 42.0;
 pub const ALTEZZA_TEMPO: f32 = 50.0;
 
@@ -61,7 +61,12 @@ pub fn barra_tempo(
 pub fn mostra(ui: &mut egui::Ui, s: &mut Stato, fps: f32) -> Option<Rect> {
     egui::Panel::top("barra").exact_size(ALTEZZA_BARRA).frame(cornice()).show(ui, |ui| barra(ui, s, fps));
     visite::mostra(ui.ctx(), s);
+    guida::pannello(ui, s);
     match s.stanza {
+        Stanza::Benvenuto => {
+            benvenuto::mostra(ui, s);
+            None
+        }
         Stanza::Scala => {
             scala::mostra(ui, s);
             None
@@ -218,40 +223,47 @@ fn tastiera(ui: &mut egui::Ui, s: &mut Stato) {
 
 fn barra(ui: &mut egui::Ui, s: &mut Stato, fps: f32) {
     ui.horizontal_centered(|ui| {
-        ui.label(RichText::new("COLOSSI").strong().color(CIANO).size(15.0));
-        ui.add_space(10.0);
-        let schede = [
-            (Stanza::Scala, "Scala"),
-            (Stanza::BucoNero, "Buco nero"),
-            (Stanza::Gemelli, "Gemelli"),
-            (Stanza::Cadere, "Cadere"),
-            (Stanza::Curva, "Curva"),
-            (Stanza::Neutroni, "Neutroni"),
-            (Stanza::Giganti, "Giganti"),
-            (Stanza::Osservatorio, "Osservatorio"),
-            (Stanza::TreCorpi, "Tre corpi"),
-            (Stanza::Galassie, "Galassie"),
-            (Stanza::Onde, "Onde"),
-            (Stanza::Fondo, "Fondo cosmico"),
-            (Stanza::Stelle, "Stelle"),
-            (Stanza::Orizzonte, "Orizzonte"),
-        ];
-        if ui.available_width() < LARGHEZZA_SCHEDE {
-            // Finestra stretta: le schede non entrano in una riga.
-            let attuale = schede.iter().find(|q| q.0 == s.stanza).map_or("", |q| q.1);
-            egui::ComboBox::from_id_salt("banchi").selected_text(RichText::new(attuale).strong()).show_ui(ui, |ui| {
-                for (stanza, nome) in schede {
-                    ui.selectable_value(&mut s.stanza, stanza, nome);
+        let casa = s.stanza == Stanza::Benvenuto;
+        if ui.selectable_label(casa, RichText::new("COLOSSI").strong().color(CIANO).size(15.0)).on_hover_text("Torna alla pagina iniziale").clicked() {
+            s.stanza = Stanza::Benvenuto;
+        }
+        ui.add_space(8.0);
+        ui.separator();
+        let attuale = s.stanza.area();
+        for (i, area) in AREE.iter().enumerate() {
+            let scelta = attuale == Some(i);
+            if ui.selectable_label(scelta, RichText::new(area.breve).strong()).on_hover_text(area.descrizione).clicked() && !scelta {
+                s.stanza = area.banchi[0].0;
+            }
+        }
+        if let Some(i) = s.stanza.area().filter(|i| AREE[*i].banchi.len() > 1) {
+            ui.separator();
+            let banchi = AREE[i].banchi;
+            if ui.available_width() < LARGHEZZA_SCHEDE {
+                // Finestra stretta: i banchi dell'area diventano un menu.
+                let nome = banchi.iter().find(|q| q.0 == s.stanza).map_or("", |q| q.1);
+                egui::ComboBox::from_id_salt("banchi").selected_text(RichText::new(nome).strong()).show_ui(ui, |ui| {
+                    for (stanza, nome) in banchi {
+                        ui.selectable_value(&mut s.stanza, *stanza, *nome);
+                    }
+                });
+            } else {
+                for (stanza, nome) in banchi {
+                    let n = crate::guida::fatte(s, *stanza);
+                    let totale = crate::guida::guida(*stanza).map_or(0, |g| g.sfide.len());
+                    let testo = RichText::new(*nome);
+                    let testo = if totale > 0 && n == totale { testo.color(VERDE) } else { testo };
+                    ui.selectable_value(&mut s.stanza, *stanza, testo);
                 }
-            });
-        } else {
-            for (stanza, nome) in schede {
-                ui.selectable_value(&mut s.stanza, stanza, RichText::new(nome).strong());
             }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(RichText::new(format!("{fps:.0} fps")).small().color(GRIGIO));
             ui.add_space(10.0);
+            if guida::guida(s.stanza).is_some() && !s.guida_visibile && ui.button(RichText::new("Guida").color(CIANO)).clicked() {
+                s.guida_visibile = true;
+                s.guida_aperta = true;
+            }
             let mut scelta = None;
             ui.menu_button(RichText::new("Visite guidate").strong().color(CIANO), |ui| {
                 ui.set_min_width(240.0);
@@ -518,6 +530,8 @@ mod prove {
                 modificatori: Modifiers::NONE,
                 tempo: 0.0,
             };
+            s.stato.stanza = Stanza::BucoNero;
+            s.stato.guida_visibile = false;
             s.stato.lab.svuota();
             s.stato.lab.in_corso = false;
             s.giro();
@@ -651,13 +665,76 @@ mod prove {
 
     /// Le schede cambiano larghezza: si cerca quella giusta dal comportamento.
     fn apri(s: &mut Simulatore, stanza: Stanza) {
-        for x in (64..800).step_by(6) {
+        // Prima l'area, poi il banco dentro l'area.
+        let area = stanza.area().expect("banco senza area");
+        for x in (100..1500).step_by(6) {
+            if s.stato.stanza.area() == Some(area) {
+                break;
+            }
             clic(s, x as f32, 22.0);
+        }
+        for x in (100..1500).step_by(6) {
             if s.stato.stanza == stanza {
                 return;
             }
+            clic(s, x as f32, 22.0);
+            // Un clic su un'altra area cambia la fila dei banchi: si torna indietro.
+            if s.stato.stanza.area() != Some(area) {
+                s.stato.stanza = AREE[area].banchi[0].0;
+                s.giro();
+            }
         }
-        panic!("scheda non trovata");
+        assert!(s.stato.stanza == stanza, "scheda non trovata");
+    }
+
+    #[test]
+    fn dalla_pagina_iniziale_si_entra_in_un_area() {
+        let mut s = Simulatore::nuovo();
+        s.stato.stanza = Stanza::Benvenuto;
+        s.giro();
+        s.giro();
+        // La parte alta della prima scheda porta al primo banco dei colossi.
+        for y in (120..300).step_by(10) {
+            clic(&mut s, 300.0, y as f32);
+            if s.stato.stanza != Stanza::Benvenuto {
+                break;
+            }
+        }
+        assert!(s.stato.stanza == Stanza::Scala, "non si e' entrati");
+        clic(&mut s, 40.0, 22.0);
+        assert!(s.stato.stanza == Stanza::Benvenuto, "il nome in alto riporta all'inizio");
+    }
+
+    #[test]
+    fn la_fascia_della_guida_si_riduce_e_si_nasconde() {
+        let mut s = Simulatore::nuovo();
+        s.stato.guida_visibile = true;
+        s.giro();
+        // Il pulsante Riduci sta a destra nella fascia in fondo.
+        let mut ridotta = false;
+        for x in (1200..1536).rev().step_by(6) {
+            for y in [840.0 - 132.0 + 14.0] {
+                clic(&mut s, x as f32, y);
+                if !s.stato.guida_aperta {
+                    ridotta = true;
+                    break;
+                }
+            }
+            if ridotta || !s.stato.guida_visibile {
+                break;
+            }
+        }
+        assert!(ridotta || !s.stato.guida_visibile, "nessun pulsante della fascia risponde");
+    }
+
+    #[test]
+    fn la_guida_si_spunta_davvero_usando_il_banco() {
+        let mut s = Simulatore::nuovo();
+        assert_eq!(crate::guida::fatte(&s.stato, Stanza::BucoNero), 0);
+        s.stato.lab.strumento = Strumento::Sonda;
+        s.trascina((400.0, 300.0), (440.0, 340.0), PointerButton::Primary);
+        s.stato.avanza(0.02);
+        assert!(crate::guida::fatte(&s.stato, Stanza::BucoNero) >= 1);
     }
 
     #[test]

@@ -77,11 +77,16 @@ pub struct Stato {
     pub stelle: BancoStelle,
     pub orizzonte: BancoOrizzonte,
     pub visita: Option<InCorso>,
+    /// Sfide della guida gia' riuscite: banco e numero della sfida.
+    pub sfide_fatte: std::collections::HashSet<(Stanza, usize)>,
+    pub guida_aperta: bool,
+    pub guida_visibile: bool,
 }
 
 /// Quale banco di prova e' aperto.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Stanza {
+    Benvenuto,
     BucoNero,
     Gemelli,
     Cadere,
@@ -96,6 +101,62 @@ pub enum Stanza {
     Scala,
     Stelle,
     Orizzonte,
+}
+
+/// Un'area raccoglie banchi sullo stesso tema.
+pub struct Area {
+    pub nome: &'static str,
+    pub breve: &'static str,
+    pub descrizione: &'static str,
+    pub banchi: &'static [(Stanza, &'static str)],
+}
+
+pub const AREE: [Area; 4] = [
+    Area {
+        nome: "I colossi",
+        breve: "Colossi",
+        descrizione: "Buchi neri, stelle che crollano, galassie, onde dello spazio e la luce più antica.",
+        banchi: &[
+            (Stanza::Scala, "Scala"),
+            (Stanza::BucoNero, "Buco nero"),
+            (Stanza::Neutroni, "Stelle di neutroni"),
+            (Stanza::Giganti, "Giganti"),
+            (Stanza::Stelle, "Stelle"),
+            (Stanza::Galassie, "Galassie"),
+            (Stanza::Onde, "Onde"),
+            (Stanza::Fondo, "Fondo cosmico"),
+        ],
+    },
+    Area {
+        nome: "Il tempo e lo spazio",
+        breve: "Tempo e spazio",
+        descrizione: "Gemelli che invecchiano diversamente, perché cadiamo, cosa piega lo spazio, dentro l'orizzonte.",
+        banchi: &[
+            (Stanza::Gemelli, "Gemelli"),
+            (Stanza::Cadere, "Perché cadiamo"),
+            (Stanza::Curva, "Cosa curva lo spazio"),
+            (Stanza::Orizzonte, "Orizzonte"),
+        ],
+    },
+    Area {
+        nome: "Osservatorio",
+        breve: "Osservatorio",
+        descrizione: "Misure vere degli astronomi: pesa un buco nero, ascolta LIGO, trova la materia oscura.",
+        banchi: &[(Stanza::Osservatorio, "Osservatorio")],
+    },
+    Area {
+        nome: "Tre corpi",
+        breve: "Tre corpi",
+        descrizione: "Tre corpi che si attraggono: soluzioni rare, caos, punti di Lagrange, un pianeta fra tre soli.",
+        banchi: &[(Stanza::TreCorpi, "Tre corpi")],
+    },
+];
+
+impl Stanza {
+    /// L'area a cui appartiene il banco.
+    pub fn area(self) -> Option<usize> {
+        AREE.iter().position(|a| a.banchi.iter().any(|b| b.0 == self))
+    }
 }
 
 impl Default for Stato {
@@ -113,7 +174,7 @@ impl Default for Stato {
             tempo: 37.0,
             telescopio_grande: false,
             lab: Lab::default(),
-            stanza: Stanza::BucoNero,
+            stanza: Stanza::Benvenuto,
             gemelli: Gemelli::default(),
             cadere: Cadere::default(),
             curva: Curva::default(),
@@ -128,6 +189,9 @@ impl Default for Stato {
             stelle: BancoStelle::default(),
             orizzonte: BancoOrizzonte::default(),
             visita: None,
+            sfide_fatte: std::collections::HashSet::new(),
+            guida_aperta: true,
+            guida_visibile: true,
         }
     }
 }
@@ -146,6 +210,7 @@ impl Stato {
 
     pub fn avanza(&mut self, dt: f64) {
         match self.stanza {
+            Stanza::Benvenuto => {}
             Stanza::BucoNero => {
                 if self.lab.in_corso {
                     self.tempo += dt * RITMO_DISCO;
@@ -166,6 +231,7 @@ impl Stato {
             Stanza::Stelle => self.stelle.avanza(dt),
             Stanza::Orizzonte => self.orizzonte.avanza(dt),
         }
+        crate::guida::controlla(self);
     }
 
     /// Riferimenti abbastanza grandi da stare fuori dall'orizzonte.

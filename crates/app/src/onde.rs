@@ -27,6 +27,7 @@ pub struct BancoOnde {
     pub ritmo: f64,
     audio: Audio,
     avviso: Option<String>,
+    pub ascoltato: bool,
 }
 
 impl Default for BancoOnde {
@@ -40,6 +41,7 @@ impl Default for BancoOnde {
             ritmo: 0.05,
             audio: Audio::default(),
             avviso: None,
+            ascoltato: false,
         };
         b.costruisci();
         b
@@ -92,6 +94,7 @@ impl BancoOnde {
         let massimo = FREQUENZA_AUDIO as usize * 12;
         let inizio = campioni.len().saturating_sub(massimo);
         self.avviso = self.audio.suona(campioni[inizio..].to_vec(), FREQUENZA_AUDIO).err();
+        self.ascoltato = true;
     }
 }
 

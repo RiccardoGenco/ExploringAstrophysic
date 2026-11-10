@@ -51,6 +51,14 @@ impl Giganti {
         Ritmo { efficienza: self.efficienza, eddington: self.eddington }
     }
 
+    pub fn arriva_al_piu_lontano(&self) -> bool {
+        quasar_raggiunto(self, &QUASAR[0])
+    }
+
+    pub fn oltre_eddington(&self) -> bool {
+        self.eddington > 1.0
+    }
+
     fn massa_a(&self, t: f64) -> f64 {
         self.ritmo().massa_dopo(self.massa_seme, (t - self.t_seme).max(0.0))
     }

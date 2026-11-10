@@ -147,6 +147,18 @@ impl Neutroni {
         self.fase == Fase::BucoNero
     }
 
+    pub fn crollata(&self) -> bool {
+        self.fase != Fase::Stella
+    }
+
+    pub fn materia_cambiata(&self) -> bool {
+        self.catalogo != Some(0)
+    }
+
+    pub fn senza_einstein(&self) -> bool {
+        self.mostra_newton
+    }
+
     fn ricomincia(&mut self) {
         self.fase = Fase::Stella;
         self.scegli_massa(1.4);

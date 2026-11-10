@@ -246,6 +246,8 @@ pub const ESPERIMENTI: &[Esperimento] = &[
 ];
 
 pub struct Lab {
+    /// Lanci fatti a mano sul banco, per la guida.
+    pub lanci: u32,
     pub oggetti: Vec<Oggetto>,
     pub selezionato: Option<u32>,
     pub strumento: Strumento,
@@ -270,6 +272,7 @@ pub struct Lab {
 impl Default for Lab {
     fn default() -> Self {
         let mut lab = Self {
+            lanci: 0,
             oggetti: Vec::new(),
             selezionato: None,
             strumento: Strumento::Sonda,

@@ -210,6 +210,7 @@ fn gesti(
         let punto = r.interact_pointer_pos().unwrap_or(r.rect.center());
         match lab.strumento {
             Strumento::Orologio => {
+                lab.lanci += 1;
                 let nuovo = lab.orologio(fuori_orizzonte(vista.a_mondo(punto)));
                 lab.selezionato = Some(nuovo);
             }
@@ -267,6 +268,7 @@ fn gesti(
             let lontano = (cursore - vista.a_schermo(inizio)).length() > 6.0;
             if lontano {
                 let lancio = lancio_da(inizio, cursore, &vista, specie_attrezzo, aggancia, lab.legge);
+                lab.lanci += 1;
                 if lab.strumento == Strumento::Fascio {
                     lab.fascio(inizio, lancio.direzione);
                 } else {

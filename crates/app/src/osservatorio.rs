@@ -114,6 +114,15 @@ impl Osservatorio {
         }
     }
 
+    /// Vero se lo scarto e' sotto `soglia` con i soli cursori.
+    pub fn a_mano_vicino(&self, soglia: f64) -> bool {
+        self.modo == "a mano" && self.sezione == Sezione::Orbita && self.dati.chi2_ridotto(&self.orbita) < soglia
+    }
+
+    pub fn confronto_aperto(&self) -> bool {
+        self.confronto && self.incertezze.is_some()
+    }
+
     fn pubblicato(&self) -> &'static Pubblicato {
         if self.vz_fissa {
             &GHEZ_VZ_FISSA

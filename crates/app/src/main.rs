@@ -4,6 +4,7 @@
 mod ammasso;
 mod audio;
 mod banco;
+mod benvenuto;
 mod cadere;
 mod curva;
 mod fondo;
@@ -12,6 +13,7 @@ mod formato;
 mod gemelli;
 mod giganti;
 mod gpu;
+mod guida;
 mod lab;
 mod missioni;
 mod neutroni;
@@ -437,6 +439,7 @@ fn main() {
             Some(11) => stato::Stanza::Scala,
             Some(12) => stato::Stanza::Stelle,
             Some(13) => stato::Stanza::Orizzonte,
+            Some(14) => stato::Stanza::Benvenuto,
             _ => stato::Stanza::BucoNero,
         };
         if let Some(l) = valore::<f64>(&argomenti, "--vista") {
