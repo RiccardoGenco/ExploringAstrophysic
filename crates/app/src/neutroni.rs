@@ -159,9 +159,18 @@ impl Neutroni {
         self.mostra_newton
     }
 
-    fn ricomincia(&mut self) {
+    pub fn ricomincia(&mut self) {
         self.fase = Fase::Stella;
         self.scegli_massa(1.4);
+    }
+
+    /// Quanto manca al crollo, da 0 a 1, mentre si aggiunge materia.
+    pub fn progresso_crollo(&self) -> f32 {
+        if self.fase != Fase::Stella {
+            return 1.0;
+        }
+        let massima = self.curva.massa_massima();
+        ((self.stella().massa - 1.4) / (massima - 1.4).max(1e-9)).clamp(0.0, 1.0) as f32
     }
 }
 
@@ -436,6 +445,7 @@ fn strumenti(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
         Fase::Stella => {
             ui.horizontal(|ui| {
                 let bottone = ui.add_sized([180.0, 30.0], egui::Button::new(RichText::new("Aggiungi materia").strong()));
+                crate::visite::segna(ui, "aggiungi", &bottone);
                 // Un pulsante smette di risultare premuto dopo un attimo: si guarda il mouse.
                 n.aggiungi = bottone.contains_pointer() && ui.input(|i| i.pointer.primary_down());
                 ui.label(RichText::new("tieni premuto").color(GRIGIO));
@@ -493,7 +503,7 @@ fn strumenti(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
     }
 
     titoletto(ui, "LA MATERIA");
-    ui.horizontal_wrapped(|ui| {
+    let elenco = ui.horizontal_wrapped(|ui| {
         let mut scelta = None;
         for (i, (nome, _, _)) in CATALOGO.iter().enumerate() {
             if ui.selectable_label(n.catalogo == Some(i), *nome).clicked() {
@@ -504,6 +514,7 @@ fn strumenti(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
             n.cambia_materia(CATALOGO[i].1, Some(i));
         }
     });
+    crate::visite::segna(ui, "materia", &elenco.response);
 
     let mut p = n.parametri;
     let mut cambiato = false;

@@ -91,7 +91,7 @@ impl Osservatorio {
         self.modo = "col calcolo";
     }
 
-    fn riparti(&mut self) {
+    pub fn riparti(&mut self) {
         self.orbita = INIZIO;
         self.incertezze = None;
         self.modo = "a mano";
@@ -497,7 +497,8 @@ fn strumenti(ui: &mut egui::Ui, o: &mut Osservatorio) -> Option<SulBanco> {
     let mut prima = o.orbita;
     {
         let q = &mut prima;
-        ui.add(egui::Slider::new(&mut q.a, 40.0..=250.0).text("grandezza, mas").custom_formatter(|v, _| format!("{v:.1}")));
+        let cursore = ui.add(egui::Slider::new(&mut q.a, 40.0..=250.0).text("grandezza, mas").custom_formatter(|v, _| format!("{v:.1}")));
+        crate::visite::segna(ui, "cursori", &cursore);
         ui.add(egui::Slider::new(&mut q.e, 0.0..=0.98).text("schiacciamento").custom_formatter(|v, _| format!("{v:.3}")));
         ui.add(egui::Slider::new(&mut q.i, 0.0..=180.0).text("inclinazione").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));
         ui.add(egui::Slider::new(&mut q.nodo, 0.0..=360.0).text("orientamento").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));

@@ -367,6 +367,19 @@ impl Missione {
         self.sigma = incertezze(&self.modello, &self.dati, &self.par);
         self.modo = "col calcolo";
     }
+
+    /// Vero dopo che si e' premuto "Calcola la migliore".
+    pub fn calcolata(&self) -> bool {
+        self.modo == "col calcolo"
+    }
+
+    /// Torna ai valori iniziali e ai soli cursori.
+    pub fn riparti(&mut self) {
+        self.par = self.iniziali.clone();
+        self.sigma = None;
+        self.modo = "a mano";
+        self.mostra_confronto = false;
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -543,14 +556,13 @@ pub fn colonna(ui: &mut egui::Ui, m: &mut Missione) {
         m.modo = "a mano";
     }
     ui.horizontal(|ui| {
-        if ui.button(RichText::new("Calcola la migliore").strong()).clicked() {
+        let calcola = ui.button(RichText::new("Calcola la migliore").strong());
+        crate::visite::segna(ui, "calcola_missione", &calcola);
+        if calcola.clicked() {
             m.calcola();
         }
         if ui.small_button("Riparti").clicked() {
-            m.par = m.iniziali.clone();
-            m.sigma = None;
-            m.modo = "a mano";
-            m.mostra_confronto = false;
+            m.riparti();
         }
     });
 

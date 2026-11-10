@@ -205,11 +205,12 @@ fn strumenti(ui: &mut egui::Ui, g: &mut Gemelli) {
     });
 
     titoletto(ui, "CHI GUARDA");
-    ui.add(
+    let osservatore = ui.add(
         egui::Slider::new(&mut g.beta_vista, -0.9..=0.9)
             .text("velocità osservatore")
             .fixed_decimals(2),
     );
+    crate::visite::segna(ui, "chi_guarda", &osservatore);
     ui.label(
         RichText::new("Le coordinate cambiano. I due totali qui sopra no.").color(GRIGIO),
     );
@@ -408,8 +409,11 @@ fn diagramma(ui: &mut egui::Ui, area: Rect, g: &mut Gemelli) {
     linea_con_anni(&p, g, v, &casa, CIANO);
     linea_con_anni(&p, g, v, &g.linea, VIAGGIATORE);
 
-    for e in g.linea.iter().skip(1) {
+    for (i, e) in g.linea.iter().enumerate().skip(1) {
         let q = v.schermo(boost(*e, beta));
+        if i == 1 {
+            crate::visite::segna_rect(ui.ctx(), "vertice", Rect::from_center_size(q, Vec2::splat(34.0)));
+        }
         p.circle_filled(q, 7.0, VIAGGIATORE);
         p.circle_stroke(q, 7.0, Stroke::new(1.5, CHIARO));
     }
