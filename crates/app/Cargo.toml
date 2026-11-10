@@ -1,0 +1,25 @@
+[package]
+name = "colossi"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bytemuck = { version = "1.25.2", features = ["derive"] }
+colossi-fisica = { path = "../fisica" }
+egui = "0.35.0"
+egui-wgpu = { version = "0.35.0", features = ["winit"] }
+egui-winit = { version = "0.35.0", default-features = false }
+web-time = "1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cpal = "0.15"
+egui-winit = "0.35.0"
+png = "0.18.1"
+pollster = "1.0.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+wgpu = { version = "29", features = ["webgpu"] }
+web-sys = { version = "0.3", features = ["AudioBuffer", "AudioBufferSourceNode", "AudioContext", "AudioDestinationNode", "AudioNode", "AudioScheduledSourceNode", "BaseAudioContext"] }

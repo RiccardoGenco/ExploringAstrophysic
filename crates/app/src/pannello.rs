@@ -1,0 +1,821 @@
+//! Disposizione del laboratorio: barre, attrezzi, telescopio.
+
+use crate::formato::{densita, grande, lunghezza, tempo};
+use crate::lab::{Strumento, ESPERIMENTI};
+use crate::stato::{Stanza, Stato, PRESET, R_CAM_MAX, R_CAM_MIN};
+use crate::{banco, cadere, curva, fondo, galassie, gemelli, giganti, neutroni, onde, orizzonte, osservatorio, scala, stelle, strumenti, trecorpi, visite};
+use colossi_fisica::costanti::UA;
+use colossi_fisica::buco_nero::ISCO;
+use colossi_fisica::geodetica::{Legge, Orologio};
+use egui::{Color32, CornerRadius, Frame, Margin, Pos2, Rect, RichText, Sense, Stroke, UiBuilder, Vec2};
+use std::f32::consts::{FRAC_PI_2, TAU};
+
+pub const FONDO: Color32 = Color32::from_rgb(9, 11, 17);
+pub const SUPERFICIE: Color32 = Color32::from_rgb(16, 19, 27);
+pub const LINEA: Color32 = Color32::from_rgb(38, 44, 58);
+pub const CIANO: Color32 = Color32::from_rgb(90, 215, 255);
+pub const VERDE: Color32 = Color32::from_rgb(110, 225, 130);
+pub const GIALLO: Color32 = Color32::from_rgb(245, 200, 90);
+pub const GRIGIO: Color32 = Color32::from_rgb(142, 149, 165);
+pub const CHIARO: Color32 = Color32::from_rgb(226, 230, 240);
+
+const LARGHEZZA_COLONNA: f32 = 450.0;
+const QUOTA_MINIATURA: f32 = 0.40;
+const ALTEZZA_BARRA: f32 = 44.0;
+/// Sotto questa larghezza le schede diventano un menu.
+const LARGHEZZA_SCHEDE: f32 = 1180.0;
+const ALTEZZA_COMANDI: f32 = 42.0;
+pub const ALTEZZA_TEMPO: f32 = 50.0;
+
+pub fn cornice() -> Frame {
+    Frame::new().fill(SUPERFICIE).inner_margin(Margin::symmetric(10, 6))
+}
+
+/// Barra del tempo comune ai banchi di relativita'. Vero se va ricominciato.
+pub fn barra_tempo(
+    ui: &mut egui::Ui,
+    in_corso: &mut bool,
+    ritmo: &mut f64,
+    campo: std::ops::RangeInclusive<f64>,
+    unita: &str,
+) -> bool {
+    let mut ricomincia = false;
+    ui.horizontal_centered(|ui| {
+        let etichetta = if *in_corso { "Pausa" } else { "Avvia" };
+        if ui.add_sized([70.0, 30.0], egui::Button::new(RichText::new(etichetta).strong())).clicked() {
+            *in_corso = !*in_corso;
+        }
+        if ui.add_sized([86.0, 30.0], egui::Button::new("Ricomincia")).clicked() {
+            ricomincia = true;
+        }
+        ui.add_space(16.0);
+        ui.separator();
+        ui.label(RichText::new("Ritmo").color(GRIGIO));
+        ui.add(egui::Slider::new(ritmo, campo).logarithmic(true).show_value(false));
+        ui.label(RichText::new(format!("{:.2} {unita}", *ritmo).replace('.', ",")).color(CHIARO));
+    });
+    ricomincia
+}
+
+/// Disegna il banco aperto. Restituisce l'area del telescopio, se c'e', in punti.
+pub fn mostra(ui: &mut egui::Ui, s: &mut Stato, fps: f32) -> Option<Rect> {
+    egui::Panel::top("barra").exact_size(ALTEZZA_BARRA).frame(cornice()).show(ui, |ui| barra(ui, s, fps));
+    visite::mostra(ui.ctx(), s);
+    match s.stanza {
+        Stanza::Scala => {
+            scala::mostra(ui, s);
+            None
+        }
+        Stanza::Stelle => {
+            stelle::mostra(ui, &mut s.stelle);
+            None
+        }
+        Stanza::Orizzonte => {
+            orizzonte::mostra(ui, &mut s.orizzonte);
+            None
+        }
+        Stanza::BucoNero => Some(buco_nero(ui, s)),
+        Stanza::Gemelli => {
+            gemelli::mostra(ui, &mut s.gemelli);
+            None
+        }
+        Stanza::Cadere => {
+            cadere::mostra(ui, &mut s.cadere);
+            None
+        }
+        Stanza::Curva => {
+            curva::mostra(ui, &mut s.curva);
+            None
+        }
+        Stanza::Neutroni => {
+            apri_buco_nero(s, |s| neutroni::mostra(ui, &mut s.neutroni));
+            None
+        }
+        Stanza::Giganti => {
+            apri_buco_nero(s, |s| giganti::mostra(ui, &mut s.giganti));
+            None
+        }
+        Stanza::TreCorpi => {
+            trecorpi::mostra(ui, &mut s.trecorpi);
+            None
+        }
+        Stanza::Galassie => {
+            galassie::mostra(ui, &mut s.galassie);
+            None
+        }
+        Stanza::Onde => {
+            onde::mostra(ui, &mut s.onde);
+            None
+        }
+        Stanza::Fondo => {
+            fondo::mostra(ui, &mut s.fondo);
+            None
+        }
+        Stanza::Osservatorio => {
+            if let Some(o) = osservatorio::mostra(ui, &mut s.osservatorio) {
+                s.masse = o.masse;
+                let rs = s.buco_nero().raggio();
+                s.lab.carica_orbita(o.a_ua * UA / rs, o.e);
+                s.stanza = Stanza::BucoNero;
+            }
+            None
+        }
+    }
+}
+
+/// Se il banco chiede di aprire un buco nero, ci si sposta su quello.
+fn apri_buco_nero(s: &mut Stato, banco: impl FnOnce(&mut Stato) -> Option<f64>) {
+    if let Some(masse) = banco(s) {
+        s.masse = masse;
+        s.stanza = Stanza::BucoNero;
+    }
+}
+
+fn buco_nero(ui: &mut egui::Ui, s: &mut Stato) -> Rect {
+    tastiera(ui, s);
+
+    egui::Panel::top("barra_buco_nero")
+        .exact_size(ALTEZZA_COMANDI)
+        .frame(cornice())
+        .show(ui, |ui| barra_buco_nero(ui, s));
+    egui::Panel::bottom("tempo").exact_size(ALTEZZA_TEMPO).frame(cornice()).show(ui, |ui| orologi(ui, s));
+    egui::Panel::left("attrezzi")
+        .exact_size(76.0)
+        .resizable(false)
+        .frame(Frame::new().fill(SUPERFICIE).inner_margin(Margin::same(6)))
+        .show(ui, |ui| attrezzi(ui, s));
+
+    let mut telescopio = Rect::NOTHING;
+    egui::Panel::right("colonna")
+        .exact_size(LARGHEZZA_COLONNA)
+        .resizable(false)
+        .frame(Frame::NONE)
+        .show(ui, |ui| {
+            let altezza_utile = ui.ctx().content_rect().height() - ALTEZZA_BARRA - ALTEZZA_COMANDI - ALTEZZA_TEMPO;
+            let misura = Vec2::new(LARGHEZZA_COLONNA, altezza_utile * QUOTA_MINIATURA);
+            let (alto, _) = ui.allocate_exact_size(misura, Sense::hover());
+            if s.telescopio_grande {
+                banco::mostra(ui, alto, s);
+            } else {
+                telescopio = vista_telescopio(ui, alto, s);
+            }
+            Frame::new()
+                .fill(SUPERFICIE)
+                .inner_margin(Margin::same(10))
+                .show(ui, |ui| {
+                    ui.set_min_size(ui.available_size());
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| strumenti::mostra(ui, s));
+                });
+        });
+
+    egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| {
+        let area = ui.max_rect();
+        if s.telescopio_grande {
+            telescopio = vista_telescopio(ui, area, s);
+        } else {
+            banco::mostra(ui, area, s);
+        }
+    });
+    telescopio
+}
+
+fn tastiera(ui: &mut egui::Ui, s: &mut Stato) {
+    if ui.ctx().egui_wants_keyboard_input() {
+        return;
+    }
+    let lab = &mut s.lab;
+    ui.input(|i| {
+        use egui::Key::{Backspace, Delete, Num1, Num2, Num3, Num4, Num5, Period, Space, R};
+        for (tasto, strumento) in [
+            (Num1, Strumento::Seleziona),
+            (Num2, Strumento::Luce),
+            (Num3, Strumento::Sonda),
+            (Num4, Strumento::Fascio),
+            (Num5, Strumento::Orologio),
+        ] {
+            if i.key_pressed(tasto) {
+                lab.strumento = strumento;
+            }
+        }
+        if i.key_pressed(Space) {
+            lab.in_corso = !lab.in_corso;
+        }
+        if i.key_pressed(Period) {
+            lab.un_passo();
+        }
+        if i.key_pressed(R) {
+            lab.ricomincia();
+        }
+        if i.key_pressed(Delete) || i.key_pressed(Backspace) {
+            if let Some(indice) = lab.indice_selezionato() {
+                lab.elimina(indice);
+            }
+        }
+    });
+}
+
+fn barra(ui: &mut egui::Ui, s: &mut Stato, fps: f32) {
+    ui.horizontal_centered(|ui| {
+        ui.label(RichText::new("COLOSSI").strong().color(CIANO).size(15.0));
+        ui.add_space(10.0);
+        let schede = [
+            (Stanza::Scala, "Scala"),
+            (Stanza::BucoNero, "Buco nero"),
+            (Stanza::Gemelli, "Gemelli"),
+            (Stanza::Cadere, "Cadere"),
+            (Stanza::Curva, "Curva"),
+            (Stanza::Neutroni, "Neutroni"),
+            (Stanza::Giganti, "Giganti"),
+            (Stanza::Osservatorio, "Osservatorio"),
+            (Stanza::TreCorpi, "Tre corpi"),
+            (Stanza::Galassie, "Galassie"),
+            (Stanza::Onde, "Onde"),
+            (Stanza::Fondo, "Fondo cosmico"),
+            (Stanza::Stelle, "Stelle"),
+            (Stanza::Orizzonte, "Orizzonte"),
+        ];
+        if ui.available_width() < LARGHEZZA_SCHEDE {
+            // Finestra stretta: le schede non entrano in una riga.
+            let attuale = schede.iter().find(|q| q.0 == s.stanza).map_or("", |q| q.1);
+            egui::ComboBox::from_id_salt("banchi").selected_text(RichText::new(attuale).strong()).show_ui(ui, |ui| {
+                for (stanza, nome) in schede {
+                    ui.selectable_value(&mut s.stanza, stanza, nome);
+                }
+            });
+        } else {
+            for (stanza, nome) in schede {
+                ui.selectable_value(&mut s.stanza, stanza, RichText::new(nome).strong());
+            }
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(RichText::new(format!("{fps:.0} fps")).small().color(GRIGIO));
+            ui.add_space(10.0);
+            let mut scelta = None;
+            ui.menu_button(RichText::new("Visite guidate").strong().color(CIANO), |ui| {
+                ui.set_min_width(240.0);
+                for (i, v) in visite::VISITE.iter().enumerate() {
+                    if ui.button(format!("{}, {}", v.nome, v.durata)).clicked() {
+                        scelta = Some(i);
+                    }
+                }
+            });
+            if let Some(i) = scelta {
+                visite::inizia(s, i);
+            }
+        });
+    });
+}
+
+fn barra_buco_nero(ui: &mut egui::Ui, s: &mut Stato) {
+    ui.horizontal_centered(|ui| {
+        ui.label(RichText::new("Massa").color(GRIGIO));
+        ui.add(
+            egui::Slider::new(&mut s.masse, 1.0..=1e11)
+                .logarithmic(true)
+                .show_value(false),
+        );
+        let etichetta = format!("{} masse solari", grande(s.masse));
+        ui.menu_button(RichText::new(etichetta).strong(), |ui| {
+            ui.set_min_width(280.0);
+            for preset in &PRESET {
+                if ui.selectable_label(s.masse == preset.masse, preset.nome).clicked() {
+                    s.masse = preset.masse;
+                }
+            }
+            ui.separator();
+            let bh = s.buco_nero();
+            egui::Grid::new("grandezze").num_columns(2).spacing([14.0, 4.0]).show(ui, |ui| {
+                ui.label(RichText::new("Raggio dell'orizzonte").color(GRIGIO));
+                ui.label(lunghezza(bh.raggio()));
+                ui.end_row();
+                ui.label(RichText::new("Densità media").color(GRIGIO));
+                ui.label(densita(bh.densita_media()));
+                ui.end_row();
+                ui.label(RichText::new("La luce percorre un raggio in").color(GRIGIO));
+                ui.label(tempo(bh.tempo_luce()));
+                ui.end_row();
+                ui.label(RichText::new("Disco, bordo interno").color(GRIGIO));
+                ui.label(format!("{} K (stima)", grande(bh.temperatura_disco(ISCO))));
+                ui.end_row();
+            });
+        });
+
+        ui.separator();
+        ui.label(RichText::new("Gravità").color(GRIGIO));
+        let prima = (s.lab.legge, s.lab.confronta);
+        ui.selectable_value(&mut s.lab.legge, Legge::Einstein, "Einstein");
+        ui.selectable_value(&mut s.lab.legge, Legge::Newton, "Newton");
+        ui.checkbox(&mut s.lab.confronta, "Confronta le due");
+        if prima != (s.lab.legge, s.lab.confronta) {
+            s.lab.rilancia_tutti();
+        }
+
+        ui.separator();
+        let mut carica = None;
+        ui.menu_button(RichText::new("Esperimenti").strong(), |ui| {
+            ui.set_min_width(240.0);
+            for (i, esperimento) in ESPERIMENTI.iter().enumerate() {
+                if ui.button(esperimento.nome).on_hover_text(esperimento.nota).clicked() {
+                    carica = Some(i);
+                }
+            }
+        });
+        if let Some(i) = carica {
+            s.lab.carica(i);
+        }
+    });
+}
+
+fn orologi(ui: &mut egui::Ui, s: &mut Stato) {
+    let unita = s.buco_nero().tempo_luce();
+    let lab = &mut s.lab;
+    ui.horizontal_centered(|ui| {
+        let etichetta = if lab.in_corso { "Pausa" } else { "Avvia" };
+        if ui.add_sized([70.0, 30.0], egui::Button::new(RichText::new(etichetta).strong())).clicked() {
+            lab.in_corso = !lab.in_corso;
+        }
+        if ui.add_sized([58.0, 30.0], egui::Button::new("Passo")).on_hover_text("Tasto .").clicked() {
+            lab.un_passo();
+        }
+        if ui.add_sized([86.0, 30.0], egui::Button::new("Ricomincia")).on_hover_text("Tasto R").clicked() {
+            lab.ricomincia();
+        }
+        if ui.add_sized([70.0, 30.0], egui::Button::new("Svuota")).clicked() {
+            lab.svuota();
+        }
+
+        ui.add_space(16.0);
+        ui.separator();
+        ui.label(RichText::new("Ritmo").color(GRIGIO));
+        ui.add(egui::Slider::new(&mut lab.velocita, 0.1..=1e7).logarithmic(true).show_value(false));
+        ui.label(
+            RichText::new(format!("1 s qui = {} là", tempo(lab.velocita * unita)))
+                .color(CHIARO),
+        );
+
+        ui.add_space(16.0);
+        ui.separator();
+        ui.label(RichText::new("Comanda l'orologio").color(GRIGIO));
+        let prima = lab.orologio;
+        ui.selectable_value(&mut lab.orologio, Orologio::Lontano, "di chi guarda");
+        ui.selectable_value(&mut lab.orologio, Orologio::Proprio, "di ciascuno");
+        if prima != lab.orologio {
+            lab.ricomincia();
+        }
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(RichText::new(tempo(lab.t * unita)).monospace().strong().color(CIANO));
+            ui.label(RichText::new("sono passati").color(GRIGIO));
+        });
+    });
+}
+
+fn attrezzi(ui: &mut egui::Ui, s: &mut Stato) {
+    ui.spacing_mut().item_spacing.y = 4.0;
+    for (strumento, nome, tasto) in [
+        (Strumento::Seleziona, "Misura", "1"),
+        (Strumento::Luce, "Luce", "2"),
+        (Strumento::Sonda, "Sonda", "3"),
+        (Strumento::Fascio, "Fascio", "4"),
+        (Strumento::Orologio, "Orologio", "5"),
+    ] {
+        let attivo = s.lab.strumento == strumento;
+        let (area, risposta) = ui.allocate_exact_size(Vec2::new(64.0, 62.0), Sense::click());
+        let sopra = risposta.hovered();
+        let fondo = if attivo {
+            CIANO.gamma_multiply(0.16)
+        } else if sopra {
+            Color32::from_gray(32)
+        } else {
+            Color32::TRANSPARENT
+        };
+        let p = ui.painter();
+        p.rect_filled(area, CornerRadius::same(6), fondo);
+        if attivo {
+            p.rect_stroke(area, CornerRadius::same(6), Stroke::new(1.0, CIANO), egui::StrokeKind::Inside);
+        }
+        let colore = if attivo { CIANO } else { CHIARO };
+        icona(p, Pos2::new(area.center().x, area.top() + 23.0), strumento, colore);
+        p.text(
+            Pos2::new(area.center().x, area.bottom() - 11.0),
+            egui::Align2::CENTER_CENTER,
+            nome,
+            egui::FontId::proportional(12.0),
+            colore,
+        );
+        p.text(
+            area.right_top() + Vec2::new(-7.0, 8.0),
+            egui::Align2::CENTER_CENTER,
+            tasto,
+            egui::FontId::monospace(9.0),
+            GRIGIO,
+        );
+        if risposta.clicked() {
+            s.lab.strumento = strumento;
+        }
+    }
+}
+
+fn icona(p: &egui::Painter, c: Pos2, strumento: Strumento, colore: Color32) {
+    let tratto = Stroke::new(1.7, colore);
+    match strumento {
+        Strumento::Seleziona => {
+            p.circle_stroke(c, 10.0, tratto);
+            p.line_segment([c - Vec2::new(14.0, 0.0), c + Vec2::new(14.0, 0.0)], tratto);
+            p.line_segment([c - Vec2::new(0.0, 14.0), c + Vec2::new(0.0, 14.0)], tratto);
+        }
+        Strumento::Luce => {
+            let punti: Vec<Pos2> = (0..=24)
+                .map(|i| {
+                    let k = i as f32 / 24.0;
+                    c + Vec2::new(-14.0 + 28.0 * k, 4.0 * (k * TAU * 2.0).sin())
+                })
+                .collect();
+            p.add(egui::Shape::line(punti, tratto));
+        }
+        Strumento::Sonda => {
+            p.circle_filled(c + Vec2::new(-9.0, 5.0), 4.5, colore);
+            p.line_segment([c + Vec2::new(-5.0, 2.0), c + Vec2::new(12.0, -9.0)], tratto);
+            p.line_segment([c + Vec2::new(12.0, -9.0), c + Vec2::new(5.0, -9.0)], tratto);
+            p.line_segment([c + Vec2::new(12.0, -9.0), c + Vec2::new(9.0, -3.0)], tratto);
+        }
+        Strumento::Fascio => {
+            for y in [-9.0, -3.0, 3.0, 9.0] {
+                p.line_segment([c + Vec2::new(-14.0, y), c + Vec2::new(14.0, y)], tratto);
+            }
+        }
+        Strumento::Orologio => {
+            p.circle_stroke(c, 12.0, tratto);
+            p.line_segment([c, c + Vec2::new(0.0, -8.0)], tratto);
+            let a: f32 = FRAC_PI_2 * 0.7;
+            p.line_segment([c, c + Vec2::new(a.cos() * 6.0, a.sin() * 6.0)], tratto);
+        }
+    }
+}
+
+fn vista_telescopio(ui: &mut egui::Ui, area: Rect, s: &mut Stato) -> Rect {
+    let risposta = ui.interact(area, ui.id().with("telescopio"), Sense::drag());
+    let delta = risposta.drag_delta();
+    s.azimut -= f64::from(delta.x) * 0.006;
+    s.elevazione = (s.elevazione + f64::from(delta.y) * 0.006).clamp(-1.5, 1.5);
+    if risposta.hovered() {
+        let rotella = ui.input(|i| i.smooth_scroll_delta.y);
+        s.r_cam = (s.r_cam * f64::from(-rotella * 0.0025).exp()).clamp(R_CAM_MIN, R_CAM_MAX);
+    }
+
+    let comandi = Rect::from_min_size(area.min + Vec2::new(8.0, 6.0), Vec2::new(area.width() - 16.0, 26.0));
+    // Un figlio separato: non deve spostare il cursore della colonna.
+    let mut riga = ui.new_child(UiBuilder::new().max_rect(comandi));
+    riga.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 3.0;
+        ui.label(RichText::new("TELESCOPIO").small().strong().color(CHIARO));
+        ui.add_space(8.0);
+        ui.toggle_value(&mut s.disco, RichText::new("Disco").small());
+        ui.toggle_value(&mut s.doppler, RichText::new("Doppler").small());
+        ui.toggle_value(&mut s.scie, RichText::new("Scie").small());
+        ui.toggle_value(&mut s.confronti, RichText::new("Righelli").small());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let testo = if s.telescopio_grande { "Riduci" } else { "Ingrandisci" };
+            if ui.small_button(testo).clicked() {
+                s.telescopio_grande = !s.telescopio_grande;
+            }
+        });
+    });
+    ui.painter_at(area).text(
+        area.left_bottom() + Vec2::new(10.0, -8.0),
+        egui::Align2::LEFT_BOTTOM,
+        "Luce deviata: calcolata. Colori del disco e stelle: illustrativi.",
+        egui::FontId::proportional(10.5),
+        GRIGIO.gamma_multiply(0.85),
+    );
+    area
+}
+
+#[cfg(test)]
+mod prove {
+    //! Interazioni vere, senza finestra: eventi di input dati direttamente a egui.
+    use super::*;
+    use colossi_fisica::geodetica::{beta_circolare, Specie};
+    use colossi_fisica::relativita::tempo_proprio;
+    use egui::{Event, Key, Modifiers, PointerButton, RawInput};
+
+    struct Simulatore {
+        contesto: egui::Context,
+        stato: Stato,
+        eventi: Vec<Event>,
+        modificatori: Modifiers,
+        tempo: f64,
+    }
+
+    impl Simulatore {
+        fn nuovo() -> Self {
+            let mut s = Self {
+                contesto: egui::Context::default(),
+                stato: Stato::default(),
+                eventi: Vec::new(),
+                modificatori: Modifiers::NONE,
+                tempo: 0.0,
+            };
+            s.stato.lab.svuota();
+            s.stato.lab.in_corso = false;
+            s.giro();
+            s.giro();
+            s
+        }
+
+        fn giro(&mut self) {
+            self.tempo += 1.0 / 60.0;
+            let ingresso = RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1536.0, 840.0))),
+                events: std::mem::take(&mut self.eventi),
+                modifiers: self.modificatori,
+                time: Some(self.tempo),
+                predicted_dt: 1.0 / 60.0,
+                ..Default::default()
+            };
+            let stato = &mut self.stato;
+            let _ = self.contesto.run_ui(ingresso, |ui| {
+                mostra(ui, stato, 60.0);
+            });
+        }
+
+        fn muovi(&mut self, x: f32, y: f32) {
+            self.eventi.push(Event::PointerMoved(Pos2::new(x, y)));
+            self.giro();
+        }
+
+        fn bottone(&mut self, x: f32, y: f32, tasto: PointerButton, premuto: bool) {
+            self.eventi.push(Event::PointerButton {
+                pos: Pos2::new(x, y),
+                button: tasto,
+                pressed: premuto,
+                modifiers: self.modificatori,
+            });
+            self.giro();
+        }
+
+        fn trascina(&mut self, da: (f32, f32), a: (f32, f32), tasto: PointerButton) {
+            self.muovi(da.0, da.1);
+            self.bottone(da.0, da.1, tasto, true);
+            for i in 1..=8 {
+                let k = i as f32 / 8.0;
+                self.muovi(da.0 + (a.0 - da.0) * k, da.1 + (a.1 - da.1) * k);
+            }
+            self.bottone(a.0, a.1, tasto, false);
+            self.giro();
+        }
+
+        fn premi(&mut self, tasto: Key) {
+            self.eventi.push(Event::Key {
+                key: tasto,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: self.modificatori,
+            });
+            self.giro();
+        }
+    }
+
+    #[test]
+    fn i_tasti_scelgono_gli_attrezzi_e_la_pausa() {
+        let mut s = Simulatore::nuovo();
+        s.premi(Key::Num4);
+        assert!(s.stato.lab.strumento == Strumento::Fascio);
+        s.premi(Key::Num2);
+        assert!(s.stato.lab.strumento == Strumento::Luce);
+        assert!(!s.stato.lab.in_corso);
+        s.premi(Key::Space);
+        assert!(s.stato.lab.in_corso);
+    }
+
+    #[test]
+    fn trascinare_lancia_luce_e_fascio() {
+        let mut s = Simulatore::nuovo();
+        s.stato.lab.strumento = Strumento::Luce;
+        s.trascina((300.0, 300.0), (420.0, 360.0), PointerButton::Primary);
+        assert_eq!(s.stato.lab.oggetti.len(), 1);
+        assert!(s.stato.lab.oggetti[0].lancio.specie == Specie::Luce);
+
+        s.stato.lab.svuota();
+        s.stato.lab.strumento = Strumento::Fascio;
+        s.trascina((300.0, 300.0), (420.0, 300.0), PointerButton::Primary);
+        assert_eq!(s.stato.lab.oggetti.len(), 13);
+    }
+
+    #[test]
+    fn maiusc_aggancia_l_orbita_circolare() {
+        let mut s = Simulatore::nuovo();
+        s.stato.lab.strumento = Strumento::Sonda;
+        s.modificatori = Modifiers::SHIFT;
+        s.trascina((700.0, 200.0), (730.0, 240.0), PointerButton::Primary);
+        let lancio = s.stato.lab.oggetti[0].lancio;
+        let atteso = beta_circolare(lancio.raggio(), s.stato.lab.legge);
+        assert!((lancio.beta - atteso).abs() < 1e-9);
+        let scarto = (lancio.direzione - lancio.azimut()).sin().abs();
+        assert!((scarto - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn il_tasto_destro_sposta_la_mappa() {
+        let mut s = Simulatore::nuovo();
+        let prima = s.stato.lab.vista.centro;
+        s.trascina((500.0, 500.0), (620.0, 500.0), PointerButton::Secondary);
+        let dopo = s.stato.lab.vista.centro;
+        assert!(dopo[0] < prima[0] && (dopo[1] - prima[1]).abs() < 1e-9);
+        assert!(s.stato.lab.oggetti.is_empty());
+    }
+
+    #[test]
+    fn un_clic_con_l_orologio_mette_un_orologio() {
+        let mut s = Simulatore::nuovo();
+        s.stato.lab.strumento = Strumento::Orologio;
+        s.muovi(500.0, 300.0);
+        s.bottone(500.0, 300.0, PointerButton::Primary, true);
+        s.bottone(500.0, 300.0, PointerButton::Primary, false);
+        s.giro();
+        assert_eq!(s.stato.lab.oggetti.len(), 1);
+        assert!(s.stato.lab.oggetti[0].fisso);
+    }
+
+    fn clic(s: &mut Simulatore, x: f32, y: f32) {
+        s.muovi(x, y);
+        s.bottone(x, y, PointerButton::Primary, true);
+        s.bottone(x, y, PointerButton::Primary, false);
+        s.giro();
+    }
+
+    const Y_COMANDI: f32 = 65.0;
+
+    /// Le schede cambiano larghezza: si cerca quella giusta dal comportamento.
+    fn apri(s: &mut Simulatore, stanza: Stanza) {
+        for x in (64..800).step_by(6) {
+            clic(s, x as f32, 22.0);
+            if s.stato.stanza == stanza {
+                return;
+            }
+        }
+        panic!("scheda non trovata");
+    }
+
+    #[test]
+    fn la_barra_cambia_banco_e_il_menu_carica_gli_esperimenti() {
+        let mut s = Simulatore::nuovo();
+        apri(&mut s, Stanza::Gemelli);
+        assert!(s.stato.stanza == Stanza::Gemelli);
+        apri(&mut s, Stanza::Cadere);
+        assert!(s.stato.stanza == Stanza::Cadere);
+        apri(&mut s, Stanza::Curva);
+        assert!(s.stato.stanza == Stanza::Curva);
+        apri(&mut s, Stanza::BucoNero);
+        assert!(s.stato.stanza == Stanza::BucoNero);
+
+        // Il pulsante si sposta con la barra: lo si cerca dal comportamento.
+        let x_menu = (300..1200)
+            .step_by(8)
+            .map(|x| x as f32)
+            .find(|&x| {
+                s.stato.lab.nota = None;
+                clic(&mut s, x, Y_COMANDI);
+                clic(&mut s, x + 30.0, Y_COMANDI + 26.0);
+                s.stato.stanza == Stanza::BucoNero && s.stato.lab.nota.is_some()
+            })
+            .expect("menu Esperimenti");
+
+        // Si apre il menu e si cerca la riga di ogni esperimento scendendo.
+        let mut trovati = std::collections::HashSet::new();
+        for y in (80..360).step_by(6) {
+            s.stato.lab.nota = None;
+            clic(&mut s, x_menu, Y_COMANDI);
+            clic(&mut s, x_menu + 30.0, y as f32);
+            if let Some(nota) = s.stato.lab.nota {
+                trovati.insert(nota);
+            }
+            s.giro();
+        }
+        assert_eq!(trovati.len(), ESPERIMENTI.len(), "{trovati:?}");
+    }
+
+    #[test]
+    fn tenere_premuto_aggiungi_materia_fa_crollare_la_stella() {
+        let mut s = Simulatore::nuovo();
+        apri(&mut s, Stanza::Neutroni);
+        assert!(s.stato.stanza == Stanza::Neutroni);
+        s.muovi(1218.0, 330.0);
+        s.bottone(1218.0, 330.0, PointerButton::Primary, true);
+        for _ in 0..900 {
+            s.stato.avanza(1.0 / 60.0);
+            s.giro();
+        }
+        s.bottone(1218.0, 330.0, PointerButton::Primary, false);
+        assert!(s.stato.neutroni.e_buco_nero());
+    }
+
+    #[test]
+    fn nel_banco_giganti_si_trascina_il_seme_e_si_sposta_l_istante() {
+        let mut s = Simulatore::nuovo();
+        apri(&mut s, Stanza::Giganti);
+        assert!(s.stato.stanza == Stanza::Giganti);
+        s.giro();
+        let massa = s.stato.giganti.massa_seme;
+        s.trascina((144.0, 727.0), (300.0, 520.0), PointerButton::Primary);
+        assert!(s.stato.giganti.massa_seme > massa * 10.0);
+        let t = s.stato.giganti.t_cursore;
+        clic(&mut s, 880.0, 300.0);
+        assert!(s.stato.giganti.t_cursore > t);
+    }
+
+    #[test]
+    fn i_cursori_non_alterano_il_risultato_del_calcolo() {
+        let mut s = Simulatore::nuovo();
+        s.stato.stanza = Stanza::Osservatorio;
+        s.stato.osservatorio.calcola();
+        let orbita = s.stato.osservatorio.orbita;
+        for _ in 0..5 {
+            s.giro();
+        }
+        assert_eq!(s.stato.osservatorio.orbita, orbita);
+        assert!(s.stato.osservatorio.incertezze.is_some());
+    }
+
+    #[test]
+    fn le_visite_disegnano_ogni_tappa_senza_errori() {
+        let mut s = Simulatore::nuovo();
+        for (i, v) in visite::VISITE.iter().enumerate() {
+            visite::inizia(&mut s.stato, i);
+            for k in 0..v.tappe.len() {
+                (v.tappe[k].prepara)(&mut s.stato);
+                s.stato.avanza(0.02);
+                s.giro();
+            }
+            s.stato.visita = None;
+        }
+    }
+
+    #[test]
+    fn nella_scala_la_rotella_cambia_la_vista() {
+        let mut s = Simulatore::nuovo();
+        s.stato.stanza = Stanza::Scala;
+        s.giro();
+        let prima = s.stato.scala.log_vista;
+        s.trascina((500.0, 400.0), (500.0, 200.0), PointerButton::Primary);
+        assert!(s.stato.scala.log_vista < prima || s.stato.scala.log_vista == 0.0);
+    }
+
+    #[test]
+    fn il_banco_tre_corpi_si_apre_e_una_partenza_si_trascina() {
+        let mut s = Simulatore::nuovo();
+        apri(&mut s, Stanza::TreCorpi);
+        s.giro();
+        s.stato.trecorpi.in_corso = false;
+        let area = Rect::from_min_max(Pos2::new(0.0, 44.0), Pos2::new(1106.0, 790.0));
+        let q = s.stato.trecorpi.schermo_partenza(area, 2);
+        let prima = s.stato.trecorpi.iniziale[2].x;
+        s.trascina((q.x, q.y), (q.x + 60.0, q.y - 40.0), PointerButton::Primary);
+        assert_ne!(s.stato.trecorpi.iniziale[2].x, prima);
+        assert!(s.stato.trecorpi.sistema.t == 0.0);
+    }
+
+    #[test]
+    fn nell_osservatorio_un_clic_toglie_una_misura() {
+        let mut s = Simulatore::nuovo();
+        s.stato.stanza = Stanza::Osservatorio;
+        s.giro();
+        s.giro();
+        let centrale = Rect::from_min_max(Pos2::new(0.0, 44.0), Pos2::new(1106.0, 840.0));
+        let q = s.stato.osservatorio.schermo_prima_posizione(centrale);
+        clic(&mut s, q.x, q.y);
+        assert!(!s.stato.osservatorio.dati.posizioni[0].attiva);
+    }
+
+    #[test]
+    fn i_banchi_di_relativita_si_aprono_e_rispondono() {
+        let mut s = Simulatore::nuovo();
+        s.stato.stanza = Stanza::Gemelli;
+        s.giro();
+        s.giro();
+        // Si trascina la svolta del viaggio verso destra e si misura il tempo proprio.
+        let prima = tempo_proprio(&s.stato.gemelli.linea);
+        let centrale = Rect::from_min_max(Pos2::new(0.0, 44.0), Pos2::new(1136.0, 790.0));
+        let q = s.stato.gemelli.posizione_vertice(centrale, 1);
+        s.trascina((q.x, q.y), (q.x + 30.0, q.y), PointerButton::Primary);
+        let dopo = tempo_proprio(&s.stato.gemelli.linea);
+        assert!(dopo < prima, "piu' lontano nello stesso tempo: {dopo} contro {prima}");
+
+        s.stato.stanza = Stanza::Cadere;
+        s.giro();
+        let quota = s.stato.cadere.h[24];
+        s.trascina((560.0, 420.0), (560.0, 300.0), PointerButton::Primary);
+        assert!(s.stato.cadere.h[24] > quota, "trascinare in alto alza la curva");
+        s.stato.stanza = Stanza::Curva;
+        s.giro();
+        let partenza = s.stato.curva.partenza;
+        s.muovi(300.0, 300.0);
+        s.bottone(300.0, 300.0, PointerButton::Primary, true);
+        s.bottone(300.0, 300.0, PointerButton::Primary, false);
+        s.giro();
+        assert_ne!(s.stato.curva.partenza, partenza);
+    }
+}

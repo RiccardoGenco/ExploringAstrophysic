@@ -1,0 +1,6 @@
+[package]
+name = "colossi-fisica"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

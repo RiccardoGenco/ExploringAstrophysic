@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colossi</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #090b11; color: #e2e6f0; font: 16px system-ui, sans-serif; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+  #avviso { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<div id="avviso">Sto caricando Colossi...</div>
+<script type="module">
+  const avviso = document.getElementById("avviso");
+  const adattatore = navigator.gpu ? await navigator.gpu.requestAdapter() : null;
+  if (!adattatore) {
+    avviso.textContent = "Colossi ha bisogno di WebGPU: serve una versione recente di Chrome, Edge o Firefox.";
+  } else {
+    const modulo = await import("./pkg/colossi.js");
+    await modulo.default();
+    avviso.remove();
+  }
+</script>
+</body>
+</html>
