@@ -161,7 +161,7 @@ fn campo(ui: &mut egui::Ui, area: Rect, b: &BancoOnde) {
             let r = d.length();
             let t_rit = b.t - f64::from(r) * durata_attraversamento;
             let valore = b.campione(t_rit).filter(|_| t_rit >= b.inizio()).map_or(0.0, |c| {
-                let ampiezza = (c.h.abs().max(b.coppia.ampiezza(c.f)) / b.h_massimo) as f32;
+                let ampiezza = ((c.h.abs().max(b.coppia.ampiezza(c.f)) / b.h_massimo) as f32).powf(0.4);
                 let angolo = d.y.atan2(d.x);
                 ampiezza * (2.0 * angolo - c.fase as f32).cos() / (1.0 + 2.2 * r)
             });
@@ -187,17 +187,24 @@ fn campo(ui: &mut egui::Ui, area: Rect, b: &BancoOnde) {
         let d = Vec2::new(angolo.cos(), angolo.sin()) * raggio_orbita;
         let totale = (b.coppia.m1 + b.coppia.m2) as f32;
         for (segno, m) in [(1.0_f32, b.coppia.m2 as f32), (-1.0, b.coppia.m1 as f32)] {
-            p.circle_filled(centro + d * segno * (m / totale) * 2.0, 8.0, Color32::BLACK);
-            p.circle_stroke(centro + d * segno * (m / totale) * 2.0, 8.0, Stroke::new(1.4, CHIARO));
+            let c = centro + d * segno * (m / totale) * 2.0;
+            for k in (1..=4).rev() {
+                p.circle_filled(c, 11.0 + 4.0 * k as f32, Color32::from_rgb(255, 170, 90).gamma_multiply(0.07));
+            }
+            p.circle_filled(c, 11.0, Color32::BLACK);
+            p.circle_stroke(c, 11.0, Stroke::new(1.8, Color32::from_rgb(255, 210, 150)));
         }
     } else {
-        p.circle_filled(centro, 13.0, Color32::BLACK);
-        p.circle_stroke(centro, 13.0, Stroke::new(1.6, CHIARO));
+        for k in (1..=5).rev() {
+            p.circle_filled(centro, 14.0 + 5.0 * k as f32, Color32::from_rgb(255, 170, 90).gamma_multiply(0.07));
+        }
+        p.circle_filled(centro, 15.0, Color32::BLACK);
+        p.circle_stroke(centro, 15.0, Stroke::new(2.0, Color32::from_rgb(255, 210, 150)));
     }
 
     let f = FontId::proportional(13.0);
-    p.text(area.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "Lo schema delle onde nel piano dell'orbita. Forma vera, scala e ritardo esagerati per poterli vedere.", f.clone(), CHIARO);
-    p.text(area.left_top() + Vec2::new(14.0, 32.0), Align2::LEFT_TOP, "Ogni orbita ne produce due: l'onda vibra al doppio della frequenza del giro.", f, CIANO);
+    p.text(area.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "Due buchi neri si avvicinano girando: ogni giro scuote lo spazio e manda onde.", FontId::proportional(15.0), CHIARO);
+    p.text(area.left_top() + Vec2::new(14.0, 32.0), Align2::LEFT_TOP, "Blu: lo spazio si stira. Rosso: si comprime. Le dimensioni e il ritardo sono esagerati per vederli.", f, CIANO);
 }
 
 fn onda(ui: &mut egui::Ui, area: Rect, b: &BancoOnde) {
@@ -266,30 +273,10 @@ fn riga(ui: &mut egui::Ui, nome: &str, valore: String) {
 }
 
 fn strumenti(ui: &mut egui::Ui, b: &mut BancoOnde) {
-    anello(ui, b);
-
-    titoletto(ui, "LA COPPIA");
-    ui.horizontal(|ui| {
-        if ui.small_button("Primo segnale, 2015").clicked() {
-            b.coppia = GW150914;
-            b.costruisci();
-        }
-        if ui.small_button("Due stelle di neutroni, 2017").clicked() {
-            b.coppia = GW170817;
-            b.costruisci();
-        }
-    });
-    let prima = b.coppia;
-    ui.add(egui::Slider::new(&mut b.coppia.m1, 1.0..=100.0).logarithmic(true).text("massa 1, soli").fixed_decimals(1));
-    ui.add(egui::Slider::new(&mut b.coppia.m2, 1.0..=100.0).logarithmic(true).text("massa 2, soli").fixed_decimals(1));
-    ui.add(egui::Slider::new(&mut b.coppia.distanza_mpc, 10.0..=3000.0).logarithmic(true).text("distanza, Mpc").fixed_decimals(0));
-    b.coppia.neutroni = b.coppia.m1 < 3.0 && b.coppia.m2 < 3.0;
-    if prima != b.coppia && ui.input(|i| !i.pointer.any_down()) {
-        b.costruisci();
-    }
-
-    ui.add_space(4.0);
-    let ascolta = ui.button(RichText::new("Ascolta il segnale").strong());
+    ui.label(RichText::new("IL GIOCO").small().strong().color(GRIGIO));
+    ui.add(egui::Label::new(RichText::new("Guarda due buchi neri fondersi e ascolta come suona lo spazio che vibra.").size(17.0).strong().color(CHIARO)).wrap());
+    ui.add_space(8.0);
+    let ascolta = ui.add_sized([ui.available_width(), 46.0], egui::Button::new(RichText::new("🔊  Ascolta il segnale").size(17.0).strong()));
     crate::visite::segna(ui, "ascolta", &ascolta);
     if ascolta.clicked() {
         b.suona();
@@ -297,35 +284,64 @@ fn strumenti(ui: &mut egui::Ui, b: &mut BancoOnde) {
     if let Some(e) = &b.avviso {
         ui.label(RichText::new(format!("Audio non disponibile: {e}")).color(GIALLO));
     }
+    ui.label(RichText::new("Il suono è il segnale vero accelerato fino a renderlo udibile.").color(GRIGIO));
 
-    titoletto(ui, "LETTURE");
+    titoletto(ui, "SCEGLI LA COPPIA");
+    if ui.add_sized([ui.available_width(), 32.0], egui::Button::new("Due buchi neri (il primo segnale, 2015)").selected(!b.coppia.neutroni)).clicked() {
+        b.coppia = GW150914;
+        b.costruisci();
+    }
+    if ui.add_sized([ui.available_width(), 32.0], egui::Button::new("Due stelle di neutroni (2017)").selected(b.coppia.neutroni)).clicked() {
+        b.coppia = GW170817;
+        b.costruisci();
+    }
+    if ui.add_sized([ui.available_width(), 32.0], egui::Button::new("Ricomincia dall'inizio")).clicked() {
+        b.costruisci();
+    }
+
+    titoletto(ui, "COSA VEDI");
     let ora = b.campione(b.t);
     let c = b.coppia;
     egui::Grid::new("letture_onde").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
         if let Some(q) = ora {
-            riga(ui, "Frequenza dell'onda", format!("{} Hz", decimale(q.f)));
+            riga(ui, "Giri al secondo", format!("{}", decimale(q.f / 2.0)));
             if q.t < 0.0 {
                 riga(ui, "Distanza tra i due", format!("{} km", grande(c.separazione(q.f))));
             }
         }
-        riga(ui, "Massa chirp", format!("{} soli", decimale(c.massa_chirp())));
         if !c.neutroni {
             riga(ui, "Massa finale", format!("{} soli", decimale(c.massa_finale())));
             riga(ui, "Diventate onde", format!("{} soli", decimale(c.energia_irraggiata())));
-            riga(ui, "Rotazione finale", format!("{} su 1", decimale(c.rotazione_finale())));
-            let (f, _) = c.assestamento();
-            riga(ui, "Nota finale", format!("{} Hz", decimale(f)));
         }
-        riga(ui, "Potenza all'ultima orbita", format!("{} soli", grande(c.potenza(c.frequenza_fine_spirale()) / LUMINOSITA_SOLE)));
         let s = stiramento_ligo(b.h_massimo);
-        riga(ui, "Braccio di 4 km", format!("{} protoni", format!("{:.4}", s / RAGGIO_PROTONE).replace('.', ",")));
+        riga(ui, "Braccio di 4 km", format!("si muove di {} protoni", format!("{:.4}", s / RAGGIO_PROTONE).replace('.', ",")));
     });
-    ui.add_space(4.0);
-    ui.label(
-        RichText::new("Spirale: formula di quadrupolo. Fusione e assestamento: raccordo approssimato. Non è il dato misurato.")
-            .small()
-            .color(GRIGIO),
-    );
+
+    ui.add_space(10.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
+        anello(ui, b);
+        let prima = b.coppia;
+        ui.add(egui::Slider::new(&mut b.coppia.m1, 1.0..=100.0).logarithmic(true).text("massa 1, soli").fixed_decimals(1));
+        ui.add(egui::Slider::new(&mut b.coppia.m2, 1.0..=100.0).logarithmic(true).text("massa 2, soli").fixed_decimals(1));
+        ui.add(egui::Slider::new(&mut b.coppia.distanza_mpc, 10.0..=3000.0).logarithmic(true).text("distanza, Mpc").fixed_decimals(0));
+        b.coppia.neutroni = b.coppia.m1 < 3.0 && b.coppia.m2 < 3.0;
+        if prima != b.coppia && ui.input(|i| !i.pointer.any_down()) {
+            b.costruisci();
+        }
+        egui::Grid::new("letture_onde2").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
+            if let Some(q) = ora {
+                riga(ui, "Frequenza dell'onda", format!("{} Hz", decimale(q.f)));
+            }
+            riga(ui, "Massa chirp", format!("{} soli", decimale(c.massa_chirp())));
+            if !c.neutroni {
+                riga(ui, "Rotazione finale", format!("{} su 1", decimale(c.rotazione_finale())));
+                let (f, _) = c.assestamento();
+                riga(ui, "Nota finale", format!("{} Hz", decimale(f)));
+            }
+            riga(ui, "Potenza all'ultima orbita", format!("{} soli", grande(c.potenza(c.frequenza_fine_spirale()) / LUMINOSITA_SOLE)));
+        });
+        ui.label(RichText::new("Spirale: formula di quadrupolo. Fusione e assestamento: raccordo approssimato. Non è il dato misurato.").small().color(GRIGIO));
+    });
 }
 
 #[cfg(test)]

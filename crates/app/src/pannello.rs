@@ -986,6 +986,7 @@ mod prove {
             match nome {
                 "cadere" => s.stato.cadere.avanzamento = 0.5,
                 "gemelli" => s.stato.gemelli.avanzamento = 0.5,
+                "onde" => { for _ in 0..4 { s.stato.onde.avanza(2.0); } }
                 _ => {}
             }
             for _ in 0..90 {
