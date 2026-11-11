@@ -431,8 +431,32 @@ fn nebbia(ui: &mut egui::Ui, area: Rect, b: &BancoFondo) {
         p.rect_filled(area, 0.0, tinta.gamma_multiply(ion * 0.55));
     }
 
+    // Elettroni liberi e atomi: quelli che fanno rimbalzare la luce, poi spariscono.
+    let tempo_anim = ui.input(|i| i.time) as f32;
+    let ioni = (ion * 150.0) as u32;
+    for i in 0..150u32 {
+        let x = (i.wrapping_mul(2654435761) >> 8) as f32 % 1000.0 / 1000.0;
+        let y = (i.wrapping_mul(40503).wrapping_add(5) >> 3) as f32 % 1000.0 / 1000.0;
+        let q = area.min + Vec2::new(
+            (x + 0.012 * (tempo_anim * (0.7 + (i % 5) as f32 * 0.2) + i as f32).sin()).rem_euclid(1.0) * area.width(),
+            (y + 0.012 * (tempo_anim * (0.6 + (i % 4) as f32 * 0.25) + i as f32 * 1.7).cos()).rem_euclid(1.0) * area.height(),
+        );
+        if i < ioni {
+            p.circle_filled(q, 3.2, Color32::from_rgb(255, 235, 140));
+            p.circle_filled(q + Vec2::new(9.0, 3.0), 2.0, Color32::from_rgb(120, 190, 255));
+        } else {
+            // Un atomo: un nucleo con il suo elettrone in orbita.
+            let a = tempo_anim * 2.0 + i as f32;
+            p.circle_filled(q, 3.6, Color32::from_rgb(255, 120, 100));
+            p.circle_stroke(q, 8.0, Stroke::new(0.8, Color32::from_white_alpha(70)));
+            p.circle_filled(q + Vec2::new(a.cos(), a.sin()) * 8.0, 1.8, Color32::from_rgb(120, 190, 255));
+        }
+    }
     let scritta = if lume > 0.5 { Color32::from_rgb(20, 22, 30) } else { CHIARO };
-    let f = FontId::proportional(14.0);
+    let (t_ora, eta) = (temperatura(b.z), b.cosmo.eta(b.z));
+    p.text(area.right_top() + Vec2::new(-24.0, 22.0), Align2::RIGHT_TOP, tempo(eta * ANNO), FontId::proportional(34.0), scritta);
+    p.text(area.right_top() + Vec2::new(-24.0, 64.0), Align2::RIGHT_TOP, format!("dopo il Big Bang  ·  {} K", decimale(t_ora)), FontId::proportional(16.0), scritta);
+    let f = FontId::proportional(16.0);
     let frase = if b.z > 1500.0 {
         "Plasma: la luce rimbalza di continuo sugli elettroni. L'universo è una nebbia luminosa."
     } else if b.z > Z_ULTIMO_URTO * 0.85 {
@@ -443,6 +467,7 @@ fn nebbia(ui: &mut egui::Ui, area: Rect, b: &BancoFondo) {
         "Oggi: la stessa luce, stirata in microonde, arriva da ogni direzione."
     };
     p.text(area.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, frase, f, scritta);
+    p.text(area.left_bottom() + Vec2::new(14.0, -14.0), Align2::LEFT_BOTTOM, "Pallini gialli: elettroni liberi. Pallino rosso con orbita: atomo. Trattini: luce che viaggia.", FontId::proportional(13.0), scritta);
 }
 
 /// Mollweide: da latitudine ad angolo ausiliario.
@@ -662,12 +687,12 @@ fn strumenti(ui: &mut egui::Ui, b: &mut BancoFondo) {
 fn col_nebbia(ui: &mut egui::Ui, b: &mut BancoFondo) {
     titoletto(ui, "QUANDO");
     ui.horizontal(|ui| {
-        let scorri = ui.button(if b.in_corso { "Pausa" } else { "Scorri" });
+        let scorri = ui.add_sized([ui.available_width() - 130.0, 44.0], egui::Button::new(RichText::new(if b.in_corso { "⏸  Pausa" } else { "▶  Scorri il tempo" }).size(17.0).strong()));
         crate::visite::segna(ui, "scorri", &scorri);
         if scorri.clicked() {
             b.in_corso = !b.in_corso;
         }
-        if ui.button("Dall'inizio").clicked() {
+        if ui.add_sized([120.0, 44.0], egui::Button::new("Dall'inizio")).clicked() {
             b.z = Z_MASSIMO;
             b.in_corso = true;
         }
@@ -679,6 +704,11 @@ fn col_nebbia(ui: &mut egui::Ui, b: &mut BancoFondo) {
     }
 
     let (t, eta) = (temperatura(b.z), b.cosmo.eta(b.z));
+    let frase_corta = if b.z > 1500.0 { "Una nebbia di luce e particelle: nessun raggio va lontano." } else if b.z > Z_ULTIMO_URTO * 0.85 { "Si formano gli atomi: la nebbia si dirada." } else { "La luce corre libera: è quella che arriva ancora oggi." };
+    ui.add_space(6.0);
+    ui.add(egui::Label::new(RichText::new(frase_corta).size(15.0).color(CHIARO)).wrap());
+    ui.add_space(8.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
     titoletto(ui, "IN QUEL MOMENTO");
     egui::Grid::new("letture_nebbia").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
         riga(ui, "Età dell'universo", tempo(eta * ANNO));
@@ -697,6 +727,7 @@ fn col_nebbia(ui: &mut egui::Ui, b: &mut BancoFondo) {
     if b.z < 1.0 {
         ui.label(RichText::new(format!("In ogni centimetro cubo attorno a te: circa {:.0} fotoni di quell'epoca.", fotoni_per_cm3(0.0))).color(CIANO));
     }
+    });
 }
 
 fn col_cielo(ui: &mut egui::Ui, b: &mut BancoFondo) {
