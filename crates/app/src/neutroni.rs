@@ -13,7 +13,6 @@ const LARGHEZZA: f32 = 420.0;
 const R_MIN: f64 = 6.0;
 const R_MAX: f64 = 20.0;
 const M_MAX: f64 = 3.2;
-const ALTEZZA_STELLA: f32 = 250.0;
 /// Scala della vista della stella: mezza altezza, in km.
 const KM_VISTA: f32 = 15.0;
 /// Il Grande Raccordo Anulare, circa 68 km di giro.

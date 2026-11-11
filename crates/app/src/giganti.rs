@@ -95,6 +95,22 @@ pub fn mostra(ui: &mut egui::Ui, g: &mut Giganti) -> Option<f64> {
     apri
 }
 
+fn etichetta_massa(e: i32) -> String {
+    match e {
+        1 => "10".into(),
+        2 => "100".into(),
+        3 => "mille".into(),
+        4 => "10 mila".into(),
+        5 => "100 mila".into(),
+        6 => "1 milione".into(),
+        7 => "10 milioni".into(),
+        8 => "100 milioni".into(),
+        9 => "1 miliardo".into(),
+        10 => "10 miliardi".into(),
+        _ => "100 miliardi".into(),
+    }
+}
+
 fn griglia(p: &Painter, piano: Rect) {
     let f = FontId::monospace(10.0);
     let mut t = 0;
@@ -111,9 +127,9 @@ fn griglia(p: &Painter, piano: Rect) {
     for e in 1..=11 {
         let y = a_schermo(piano, 0.0, f64::from(e)).y;
         p.line_segment([Pos2::new(piano.left(), y), Pos2::new(piano.right(), y)], Stroke::new(1.0, LINEA));
-        p.text(Pos2::new(piano.left() - 6.0, y), Align2::RIGHT_CENTER, format!("10^{e}"), f.clone(), GRIGIO);
+        p.text(Pos2::new(piano.left() - 6.0, y), Align2::RIGHT_CENTER, etichetta_massa(e), f.clone(), GRIGIO);
     }
-    p.text(piano.right_bottom() + Vec2::new(0.0, 20.0), Align2::RIGHT_TOP, "età dell'universo, milioni di anni", f.clone(), GRIGIO);
+    p.text(piano.right_bottom() + Vec2::new(0.0, 20.0), Align2::RIGHT_TOP, "quanti anni ha l'universo, in milioni di anni", f.clone(), GRIGIO);
     p.text(piano.left_top() + Vec2::new(4.0, 4.0), Align2::LEFT_TOP, "massa, in masse solari", f, GRIGIO);
 }
 
@@ -126,7 +142,7 @@ fn grafico(ui: &mut egui::Ui, area: Rect, g: &mut Giganti) {
     let risposta = ui.interact(area, ui.id().with("giganti"), Sense::click_and_drag());
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, FONDO);
-    let piano = Rect::from_min_max(area.min + Vec2::new(58.0, 78.0), area.max - Vec2::new(22.0, 46.0));
+    let piano = Rect::from_min_max(area.min + Vec2::new(92.0, 78.0), area.max - Vec2::new(22.0, 46.0));
 
     if risposta.drag_started_by(PointerButton::Primary) {
         let premuto = ui.input(|i| i.pointer.press_origin()).unwrap_or(area.center());
@@ -190,8 +206,11 @@ fn grafico(ui: &mut egui::Ui, area: Rect, g: &mut Giganti) {
     // Seme e istante osservato.
     let seme = a_schermo(piano, g.t_seme, g.massa_seme.log10());
     crate::visite::segna_rect(ui.ctx(), "seme", Rect::from_center_size(seme, Vec2::splat(36.0)));
+    let battito = 0.5 + 0.5 * (ui.input(|i| i.time) as f32 * 3.0).sin();
+    p.circle_filled(seme, 14.0 + 6.0 * battito, ARANCIO.gamma_multiply(0.18));
     p.circle_filled(seme, 8.0, ARANCIO);
     p.circle_stroke(seme, 12.0, Stroke::new(1.2, CHIARO));
+    ui.ctx().request_repaint();
     p.text(seme + Vec2::new(14.0, 8.0), Align2::LEFT_TOP, "buco nero iniziale: trascinalo", FontId::proportional(11.5), CHIARO);
 
     let x = a_schermo(piano, g.t_cursore, LOG_MIN).x;
@@ -201,20 +220,8 @@ fn grafico(ui: &mut egui::Ui, area: Rect, g: &mut Giganti) {
         p.circle_filled(a_schermo(piano, g.t_cursore, massa.log10()), 5.5, CIANO);
     }
 
-    p.text(
-        area.left_top() + Vec2::new(14.0, 12.0),
-        Align2::LEFT_TOP,
-        "Trascina il punto arancione: scegli quando nasce il buco nero e quanto pesa. Clicca altrove per guardare un altro momento.",
-        FontId::proportional(13.0),
-        GRIGIO,
-    );
-    p.text(
-        area.left_top() + Vec2::new(14.0, 32.0),
-        Align2::LEFT_TOP,
-        "I punti sono buchi neri misurati, già enormi quando l'universo era giovane. Il buco nero deve crescere abbastanza in fretta per arrivarci in tempo.",
-        FontId::proportional(13.0),
-        CIANO,
-    );
+    p.text(area.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "Trascina il punto arancione: scegli quando nasce il buco nero e quanto pesa.", FontId::proportional(15.0), CHIARO);
+    p.text(area.left_top() + Vec2::new(14.0, 36.0), Align2::LEFT_TOP, "La curva arancione è la sua crescita. Deve passare dai puntini rossi: sono buchi neri veri, già enormi quando l'universo era giovane.", FontId::proportional(13.0), CIANO);
 }
 
 fn titoletto(ui: &mut egui::Ui, testo: &str) {
@@ -273,68 +280,75 @@ fn strumenti(ui: &mut egui::Ui, g: &mut Giganti) -> Option<f64> {
     let bh = BucoNero::da_masse_solari(massa);
     let r = g.ritmo();
 
-    scala(ui, &bh);
-    titoletto(ui, &format!("A {:.0} MILIONI DI ANNI DAL BIG BANG", g.t_cursore));
-    egui::Grid::new("adesso").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
-        riga(ui, "Massa", format!("{} soli", grande(massa)));
-        riga(ui, "Densità media", densita(bh.densita_media()));
-        riga(ui, "Ingoia ogni anno", format!("{} soli", grande(r.soli_all_anno(massa))));
-        riga(ui, "Brilla come", format!("{} soli", grande(r.luminosita_soli(massa))));
-        riga(ui, "Raddoppia in", format!("{} milioni di anni", decimale(r.tempo_e() * std::f64::consts::LN_2)));
-    });
-    if ui.small_button("Aprilo nel banco Buco nero").clicked() {
-        apri = Some(massa);
+    ui.label(RichText::new("IL GIOCO").small().strong().color(GRIGIO));
+    ui.add(egui::Label::new(RichText::new("Fai crescere un buco nero abbastanza in fretta da raggiungere i tre giganti.").size(17.0).strong().color(CHIARO)).wrap());
+    ui.add_space(8.0);
+    let raggiunti = QUASAR.iter().filter(|q| quasar_raggiunto(g, q)).count();
+    for q in &QUASAR {
+        let ok = quasar_raggiunto(g, q);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(if ok { "✔" } else { "○" }).size(18.0).strong().color(if ok { VERDE } else { ROSSO }));
+            ui.label(RichText::new(format!("{}: {} soli", q.nome, grande(q.massa))).color(if ok { VERDE } else { CHIARO }));
+        });
     }
-
-    titoletto(ui, "RITMO DI CRESCITA");
-    ui.add(egui::Slider::new(&mut g.eddington, 0.05..=5.0).logarithmic(true).text("rispetto al limite di Eddington").fixed_decimals(2));
-    ui.add(egui::Slider::new(&mut g.efficienza, 0.04..=0.42).text("massa che diventa luce").fixed_decimals(2));
-    if g.eddington > 1.0 {
-        ui.label(RichText::new("Sopra il limite: la luce dovrebbe respingere la materia in caduta.").color(GIALLO));
-    }
-
-    titoletto(ui, "DA DOVE PARTE");
-    ui.horizontal_wrapped(|ui| {
-        for (nome, z, m) in SEMI {
-            if ui.small_button(nome).clicked() {
-                g.t_seme = tempo_cosmico(z);
-                g.massa_seme = m;
-            }
-        }
-    });
-    ui.label(RichText::new(format!(
-        "Parte con {} soli di massa, a {:.0} milioni di anni dal Big Bang.",
-        grande(g.massa_seme),
-        g.t_seme
-    )).color(GRIGIO));
-
-    titoletto(ui, "BUCHI NERI MISURATI");
-    egui::Grid::new("quasar").num_columns(4).spacing([10.0, 3.0]).striped(true).show(ui, |ui| {
-        for t in ["", "Massa", "Ci arrivi?", "Massa di partenza minima"] {
-            ui.label(RichText::new(t).small().color(GRIGIO));
-        }
-        ui.end_row();
-        for q in &QUASAR {
-            let t = tempo_cosmico(q.z);
-            ui.label(RichText::new(q.nome).color(CHIARO)).on_hover_text(format!(
-                "z = {}, circa {:.0} milioni di anni dopo il Big Bang. {}",
-                decimale(q.z),
-                t,
-                q.fonte
-            ));
-            ui.label(RichText::new(grande(q.massa)).monospace());
-            let ok = quasar_raggiunto(g, q);
-            ui.label(RichText::new(if ok { "sì" } else { "no" }).strong().color(if ok { VERDE } else { ROSSO }));
-            if t > g.t_seme {
-                ui.label(RichText::new(grande(r.seme_necessario(q.massa, t - g.t_seme))).monospace());
-            } else {
-                ui.label(RichText::new("—").color(GRIGIO));
-            }
-            ui.end_row();
-        }
-    });
     ui.add_space(4.0);
-    ui.label(RichText::new("Crescita continua, cosmologia Planck 2018 piatta.").small().color(GRIGIO));
+    let messaggio = if raggiunti == QUASAR.len() {
+        "Li hai raggiunti tutti! Ora prova a farlo con una partenza più piccola."
+    } else if raggiunti > 0 {
+        "Ne hai preso qualcuno. Per gli altri serve partire prima o più grossi."
+    } else {
+        "Nessuno ancora. Prova una partenza diversa qui sotto."
+    };
+    ui.label(RichText::new(messaggio).color(if raggiunti == QUASAR.len() { VERDE } else { GRIGIO }));
+
+    titoletto(ui, "1. SCEGLI DA DOVE PARTE");
+    for (nome, z, m) in SEMI {
+        let scelto = (g.massa_seme - m).abs() < 1e-6 && (g.t_seme - tempo_cosmico(z)).abs() < 1e-6;
+        let descr = format!("{nome}  ({} soli)", grande(m));
+        if ui.add_sized([ui.available_width(), 32.0], egui::Button::new(RichText::new(descr).size(14.0)).selected(scelto)).clicked() {
+            g.t_seme = tempo_cosmico(z);
+            g.massa_seme = m;
+        }
+    }
+    ui.label(RichText::new("Oppure trascina il punto arancione nel grafico.").color(GRIGIO));
+
+    titoletto(ui, "2. QUANTO MANGIA");
+    ui.add(egui::Slider::new(&mut g.eddington, 0.05..=5.0).logarithmic(true).text("appetito").fixed_decimals(2));
+    ui.label(RichText::new("1 è il massimo che la sua stessa luce gli permette.").color(GRIGIO));
+    if g.eddington > 1.0 {
+        ui.label(RichText::new("Sopra 1 la luce dovrebbe respingere la materia in caduta: difficile da giustificare.").color(GIALLO));
+    }
+
+    ui.add_space(10.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
+        ui.add(egui::Slider::new(&mut g.efficienza, 0.04..=0.42).text("massa che diventa luce").fixed_decimals(2));
+        scala(ui, &bh);
+        titoletto(ui, &format!("A {:.0} MILIONI DI ANNI DAL BIG BANG", g.t_cursore));
+        egui::Grid::new("adesso").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
+            riga(ui, "Massa", format!("{} soli", grande(massa)));
+            riga(ui, "Densità media", densita(bh.densita_media()));
+            riga(ui, "Ingoia ogni anno", format!("{} soli", grande(r.soli_all_anno(massa))));
+            riga(ui, "Brilla come", format!("{} soli", grande(r.luminosita_soli(massa))));
+            riga(ui, "Raddoppia in", format!("{} milioni di anni", decimale(r.tempo_e() * std::f64::consts::LN_2)));
+        });
+        if ui.small_button("Aprilo nel banco Buco nero").clicked() {
+            apri = Some(massa);
+        }
+        titoletto(ui, "MASSA DI PARTENZA MINIMA PER OGNI GIGANTE");
+        egui::Grid::new("quasar").num_columns(2).spacing([10.0, 3.0]).striped(true).show(ui, |ui| {
+            for q in &QUASAR {
+                let t = tempo_cosmico(q.z);
+                ui.label(RichText::new(q.nome).color(CHIARO)).on_hover_text(format!("z = {}, circa {:.0} milioni di anni dopo il Big Bang. {}", decimale(q.z), t, q.fonte));
+                if t > g.t_seme {
+                    ui.label(RichText::new(grande(r.seme_necessario(q.massa, t - g.t_seme))).monospace());
+                } else {
+                    ui.label(RichText::new("—").color(GRIGIO));
+                }
+                ui.end_row();
+            }
+        });
+        ui.label(RichText::new("Crescita continua, cosmologia Planck 2018 piatta.").small().color(GRIGIO));
+    });
     apri
 }
 
