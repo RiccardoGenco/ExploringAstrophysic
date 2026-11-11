@@ -225,10 +225,24 @@ fn mappa(ui: &mut egui::Ui, area: Rect, c: &mut Curva) {
 
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, FONDO);
+    for i in 0..90u32 {
+        let x = (i.wrapping_mul(2654435761) >> 8) as f32 % 1000.0 / 1000.0;
+        let y = (i.wrapping_mul(40503).wrapping_add(11) >> 3) as f32 % 1000.0 / 1000.0;
+        p.circle_filled(area.min + Vec2::new(x * area.width(), y * area.height()), 0.7 + (i % 3) as f32 * 0.4, Color32::from_white_alpha(110));
+    }
     disegna_campo(&p, centro, px, c.sfera.raggio as f32, area);
     let raggio_px = c.sfera.raggio as f32 * px;
-    p.circle_filled(centro, raggio_px, MATERIA.gamma_multiply(0.22));
+    // Alone e corpo del pianeta: piu' denso al centro.
+    for k in (1..=6).rev() {
+        let f = k as f32 / 6.0;
+        p.circle_filled(centro, raggio_px * (1.0 + 0.35 * f), MATERIA.gamma_multiply(0.035));
+    }
+    for k in 0..12 {
+        let f = 1.0 - k as f32 / 12.0;
+        p.circle_filled(centro, raggio_px * f, MATERIA.gamma_multiply(0.05 + 0.05 * (1.0 - f)));
+    }
     p.circle_stroke(centro, raggio_px, Stroke::new(1.5, MATERIA));
+    p.text(centro, Align2::CENTER_CENTER, "materia", FontId::proportional(12.0), MATERIA.gamma_multiply(0.8));
 
     if c.scia.len() > 1 {
         let punti: Vec<Pos2> = c.scia.iter().map(|q| a_schermo([f64::from(q[0]), f64::from(q[1])])).collect();
@@ -241,7 +255,17 @@ fn mappa(ui: &mut egui::Ui, area: Rect, c: &mut Curva) {
     if let Some(primo) = anello.first().copied() {
         anello.push(primo);
     }
-    p.add(Shape::line(anello, Stroke::new(2.0, CIANO)));
+    // Piu' il volume si restringe, piu' la palla vira dal ciano al rosso.
+    let v = c.palla.volume_relativo().clamp(0.0, 1.5) as f32;
+    let stretta = (1.0 - v).clamp(0.0, 1.0);
+    let tinta = Color32::from_rgb((90.0 + 165.0 * stretta) as u8, (215.0 - 120.0 * stretta) as u8, (255.0 - 175.0 * stretta) as u8);
+    if anello.len() > 2 {
+        p.add(Shape::convex_polygon(anello.clone(), tinta.gamma_multiply(0.22), Stroke::NONE));
+        for q in anello.iter().step_by(6) {
+            p.circle_filled(*q, 1.8, tinta);
+        }
+    }
+    p.add(Shape::line(anello, Stroke::new(2.0, tinta)));
     let [x, _, z] = c.palla.centro();
     p.circle_filled(a_schermo([x, z]), 2.5, CIANO);
 
