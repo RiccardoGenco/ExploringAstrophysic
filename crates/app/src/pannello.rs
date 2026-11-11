@@ -876,7 +876,7 @@ mod prove {
         assert!(s.stato.stanza == Stanza::Giganti);
         s.giro();
         let massa = s.stato.giganti.massa_seme;
-        s.trascina((144.0, 727.0), (300.0, 520.0), PointerButton::Primary);
+        s.trascina((175.0, 727.0), (300.0, 520.0), PointerButton::Primary);
         assert!(s.stato.giganti.massa_seme > massa * 10.0);
         let t = s.stato.giganti.t_cursore;
         clic(&mut s, 880.0, 300.0);
