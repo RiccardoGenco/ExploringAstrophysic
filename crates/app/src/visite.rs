@@ -145,7 +145,7 @@ const COLOSSI: &[Tappa] = &[
         titolo: "Giganti nati troppo presto",
         storia: "Questi buchi neri erano già enormi quando l'universo era giovane. Come hanno fatto a crescere in tempo? Non lo sappiamo ancora del tutto.",
         compito: "Trascina il punto arancione finché la curva tocca il quasar più lontano.",
-        esito: "Ci sei arrivato. Serve un buco nero di partenza già pesante o una crescita velocissima, e gli astronomi discutono ancora quale.",
+        esito: "Ci sei arrivato. Serve una partenza già pesante o una crescita velocissima: gli astronomi ne discutono ancora.",
         indizio: indizio("seme", "Trascina questo punto"),
         prepara: |s| {
             s.stanza = Stanza::Giganti;
