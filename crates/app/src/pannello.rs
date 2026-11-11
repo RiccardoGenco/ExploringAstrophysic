@@ -892,7 +892,7 @@ mod prove {
         s.stato.stanza = Stanza::Cadere;
         s.giro();
         let quota = s.stato.cadere.h[24];
-        s.trascina((560.0, 420.0), (560.0, 300.0), PointerButton::Primary);
+        s.trascina((900.0, 420.0), (900.0, 300.0), PointerButton::Primary);
         assert!(s.stato.cadere.h[24] > quota, "trascinare in alto alza la curva");
         s.stato.stanza = Stanza::Curva;
         s.giro();
