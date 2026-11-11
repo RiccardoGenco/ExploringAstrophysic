@@ -881,6 +881,7 @@ mod prove {
         s.giro();
         s.giro();
         // Si trascina la svolta del viaggio verso destra e si misura il tempo proprio.
+        s.stato.gemelli.scena = false;
         let prima = tempo_proprio(&s.stato.gemelli.linea);
         let centrale = Rect::from_min_max(Pos2::new(0.0, 44.0), Pos2::new(1136.0, 790.0));
         let q = s.stato.gemelli.posizione_vertice(centrale, 1);
