@@ -1,7 +1,7 @@
 //! Cosa curva lo spazio-tempo: una palla di particelle lasciata cadere, fuori e
 //! dentro la materia.
 
-use crate::pannello::{self, CHIARO, CIANO, FONDO, GIALLO, GRIGIO, LINEA, SUPERFICIE, VERDE};
+use crate::pannello::{self, CHIARO, CIANO, FONDO, GIALLO, GRIGIO, LINEA, SUPERFICIE};
 use colossi_fisica::relativita::{Palla, Sfera};
 use egui::{Align2, Color32, FontId, Frame, Margin, Painter, Pos2, Rect, RichText, Sense, Shape, Stroke, Vec2};
 
@@ -9,6 +9,7 @@ const LARGHEZZA: f32 = 400.0;
 const RAGGIO_RELATIVO_PALLA: f64 = 0.22;
 const ALTEZZA_ZOOM: f32 = 230.0;
 const CAMPO: f64 = 4.2;
+const INGRANDIMENTO: f32 = 4.0;
 const MATERIA: Color32 = Color32::from_rgb(255, 170, 90);
 
 pub struct Curva {
@@ -157,57 +158,66 @@ fn numero(x: f64) -> String {
 }
 
 fn strumenti(ui: &mut egui::Ui, c: &mut Curva) {
-    zoom(ui, c);
+    ui.label(RichText::new("IL GIOCO").small().strong().color(GRIGIO));
+    ui.add(egui::Label::new(RichText::new("Lascia cadere una palla di particelle e guarda cosa le succede.").size(17.0).strong().color(CHIARO)).wrap());
+    ui.add_space(4.0);
+    ui.add(egui::Label::new(RichText::new("Clicca in un punto qualsiasi della mappa: la palla parte ferma e cade verso la materia.").color(GRIGIO)).wrap());
+    ui.add_space(8.0);
 
-    titoletto(ui, "FORMA DELLA PALLA");
-    let [lungo, largo, fuori] = c.palla.semiassi().map(|a| a / c.palla.raggio);
-    barra(ui, "Lungo la caduta", lungo, GIALLO);
-    barra(ui, "Di lato", largo, CIANO);
-    barra(ui, "Fuori dal piano", fuori, CIANO);
-    barra(ui, "Volume", c.palla.volume_relativo(), VERDE);
-
-    titoletto(ui, "ALL'INIZIO DELLA CADUTA");
-    let teorica = c.sfera.focalizzazione_teorica(c.partenza);
-    let misurata = c.sfera.focalizzazione_misurata(c.partenza);
-    egui::Grid::new("focalizzazione").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
-        ui.label(RichText::new("Il volume accelera (misura)").color(GRIGIO));
-        ui.label(RichText::new(numero(misurata)).monospace().strong());
-        ui.end_row();
-        ui.label(RichText::new("Einstein: -4π G densità").color(GRIGIO));
-        ui.label(RichText::new(numero(teorica)).monospace().strong());
-        ui.end_row();
-    });
-    let esito = if teorica < 0.0 {
-        "C'è materia: il volume si contrae da subito."
-    } else {
-        "Niente materia qui: si deforma, ma il volume resta."
-    };
-    ui.label(RichText::new(esito).color(CIANO));
-
-    titoletto(ui, "LA MATERIA");
-    let prima = c.sfera;
-    ui.add(egui::Slider::new(&mut c.sfera.massa, 0.2..=4.0).text("massa").fixed_decimals(2));
-    ui.add(egui::Slider::new(&mut c.sfera.raggio, 0.5..=2.0).text("raggio").fixed_decimals(2));
-    if prima != c.sfera {
-        let p = c.partenza;
-        c.lascia(p);
+    let r = c.sfera.raggio;
+    for (nome, punto) in [("Lasciala nel vuoto", [r * 2.6, -r * 0.6]), ("Lasciala dentro la materia", [r * 0.55, r * 0.2]), ("Lasciala al centro", [0.0, 0.0])] {
+        if ui.add_sized([ui.available_width(), 34.0], egui::Button::new(RichText::new(nome).size(15.0))).clicked() {
+            c.lascia(punto);
+        }
     }
 
-    titoletto(ui, "DA DOVE LASCIARLA");
-    ui.horizontal(|ui| {
-        let r = c.sfera.raggio;
-        if ui.small_button("Nel vuoto").clicked() {
-            c.lascia([r * 2.6, -r * 0.6]);
-        }
-        if ui.small_button("Dentro la materia").clicked() {
-            c.lascia([r * 0.55, r * 0.2]);
-        }
-        if ui.small_button("Al centro").clicked() {
-            c.lascia([0.0, 0.0]);
-        }
-    });
+    titoletto(ui, "COSA SUCCEDE ALLA PALLA");
+    let v = c.palla.volume_relativo();
+    let (barra_area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::hover());
+    let pp = ui.painter_at(barra_area);
+    pp.rect_filled(barra_area, 8.0, LINEA);
+    let k = (v / 1.2).clamp(0.0, 1.0) as f32;
+    let stretta = (1.0 - v as f32).clamp(0.0, 1.0);
+    let tinta = Color32::from_rgb((90.0 + 165.0 * stretta) as u8, (215.0 - 120.0 * stretta) as u8, (255.0 - 175.0 * stretta) as u8);
+    pp.rect_filled(Rect::from_min_size(barra_area.min, Vec2::new(barra_area.width() * k, barra_area.height())), 8.0, tinta.gamma_multiply(0.65));
+    pp.text(barra_area.center(), Align2::CENTER_CENTER, format!("Volume della palla: {:.0}%", v * 100.0), FontId::proportional(17.0), Color32::WHITE);
+    let teorica = c.sfera.focalizzazione_teorica(c.partenza);
+    let esito = if teorica < 0.0 {
+        "Qui c'è materia: la palla si schiaccia da subito. È la materia che curva lo spazio-tempo."
+    } else {
+        "Nel vuoto la palla si stira in una direzione e si stringe nell'altra, ma il volume resta lo stesso."
+    };
     ui.add_space(4.0);
-    ui.label(RichText::new("Unità con G = 1. Campo debole e materia lenta.").small().color(GRIGIO));
+    ui.add(egui::Label::new(RichText::new(esito).size(15.0).color(CIANO)).wrap());
+
+    ui.add_space(10.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
+        zoom(ui, c);
+        titoletto(ui, "FORMA DELLA PALLA");
+        let [lungo, largo, fuori] = c.palla.semiassi().map(|a| a / c.palla.raggio);
+        barra(ui, "Lungo la caduta", lungo, GIALLO);
+        barra(ui, "Di lato", largo, CIANO);
+        barra(ui, "Fuori dal piano", fuori, CIANO);
+        titoletto(ui, "ALL'INIZIO DELLA CADUTA");
+        let misurata = c.sfera.focalizzazione_misurata(c.partenza);
+        egui::Grid::new("focalizzazione").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+            ui.label(RichText::new("Il volume accelera (misura)").color(GRIGIO));
+            ui.label(RichText::new(numero(misurata)).monospace().strong());
+            ui.end_row();
+            ui.label(RichText::new("Einstein: -4π G densità").color(GRIGIO));
+            ui.label(RichText::new(numero(teorica)).monospace().strong());
+            ui.end_row();
+        });
+        titoletto(ui, "LA MATERIA");
+        let prima = c.sfera;
+        ui.add(egui::Slider::new(&mut c.sfera.massa, 0.2..=4.0).text("massa").fixed_decimals(2));
+        ui.add(egui::Slider::new(&mut c.sfera.raggio, 0.5..=2.0).text("raggio").fixed_decimals(2));
+        if prima != c.sfera {
+            let p = c.partenza;
+            c.lascia(p);
+        }
+        ui.label(RichText::new("Unità con G = 1. Campo debole e materia lenta.").small().color(GRIGIO));
+    });
 }
 
 fn mappa(ui: &mut egui::Ui, area: Rect, c: &mut Curva) {
@@ -251,7 +261,11 @@ fn mappa(ui: &mut egui::Ui, area: Rect, c: &mut Curva) {
     let partenza = a_schermo(c.partenza);
     p.circle_stroke(partenza, 5.0, Stroke::new(1.0, GRIGIO));
 
-    let mut anello: Vec<Pos2> = c.palla.anello().map(a_schermo).collect();
+    // La palla e' piccola: la si disegna ingrandita attorno al suo centro, cosi' si vede la forma.
+    let [cx0, _, cz0] = c.palla.centro();
+    let centro_palla = a_schermo([cx0, cz0]);
+    let ingrandisci = |q: Pos2| centro_palla + (q - centro_palla) * INGRANDIMENTO;
+    let mut anello: Vec<Pos2> = c.palla.anello().map(|q| ingrandisci(a_schermo(q))).collect();
     if let Some(primo) = anello.first().copied() {
         anello.push(primo);
     }
@@ -268,6 +282,7 @@ fn mappa(ui: &mut egui::Ui, area: Rect, c: &mut Curva) {
     p.add(Shape::line(anello, Stroke::new(2.0, tinta)));
     let [x, _, z] = c.palla.centro();
     p.circle_filled(a_schermo([x, z]), 2.5, CIANO);
+    p.text(centro_palla + Vec2::new(0.0, -(RAGGIO_RELATIVO_PALLA as f32) * INGRANDIMENTO * px * c.sfera.raggio as f32 - 18.0), Align2::CENTER_BOTTOM, "la palla, ingrandita 4 volte", FontId::proportional(12.0), CIANO);
 
     p.text(
         area.left_top() + Vec2::new(14.0, 12.0),
