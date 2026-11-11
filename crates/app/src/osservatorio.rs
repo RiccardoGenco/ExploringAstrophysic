@@ -519,41 +519,52 @@ fn strumenti(ui: &mut egui::Ui, o: &mut Osservatorio) -> Option<SulBanco> {
     let chi = o.dati.chi2_ridotto(&o.orbita);
     let tinta = if chi < CHI_BUONO { VERDE } else if chi < 30.0 { GIALLO } else { ROSSO };
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("Scarto dalle misure").color(GRIGIO));
-        let testo = if chi < 1000.0 { decimale(chi) } else { grande(chi) };
-        ui.label(RichText::new(testo).monospace().size(22.0).strong().color(tinta));
-        ui.label(RichText::new("vicino a 1 è buono").small().color(GRIGIO));
-    });
-    ui.label(RichText::new(format!("{} misure attive", o.dati.numero())).small().color(GRIGIO));
+    ui.add(egui::Label::new(RichText::new("Muovi i cursori finché la curva arancione passa per tutte le croci: le croci sono misure vere di una stella che gira attorno al buco nero.").color(CHIARO)).wrap());
+    ui.add_space(6.0);
+    // Il metro: piu' l'orbita aderisce alle misure, piu' si riempie.
+    let qualita = (1.0 - (chi.max(1.0).log10() / 4.0)).clamp(0.0, 1.0) as f32;
+    let (barra, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::hover());
+    let pp = ui.painter_at(barra);
+    pp.rect_filled(barra, 8.0, LINEA);
+    pp.rect_filled(Rect::from_min_size(barra.min, Vec2::new(barra.width() * qualita, barra.height())), 8.0, tinta.gamma_multiply(0.6));
+    let etichetta = if chi < CHI_BUONO { "Perfetta!".to_string() } else { format!("Aderenza alle misure: {:.0}%", qualita * 100.0) };
+    pp.text(barra.center(), Align2::CENTER_CENTER, etichetta, FontId::proportional(17.0), Color32::WHITE);
+    ui.add_space(4.0);
+    ui.label(RichText::new(format!("Peso del buco nero con questa orbita: {} milioni di soli", con_errore(o.orbita.massa() / 1e6, None, 2))).size(15.0).strong().color(CIANO));
+    if chi < CHI_BUONO {
+        ui.label(RichText::new("Hai appena fatto ciò per cui è stato dato un Nobel.").color(VERDE));
+    }
 
+    ui.add_space(6.0);
+    let aiuto = ui.add_sized([ui.available_width(), 40.0], egui::Button::new(RichText::new("Aiutami: calcola la migliore").size(15.0).strong()));
+    if aiuto.clicked() {
+        o.calcola();
+    }
+    if ui.small_button("Ricomincia").clicked() {
+        o.riparti();
+    }
+
+    ui.add_space(8.0);
+    egui::CollapsingHeader::new(RichText::new("Cursori e dettagli").strong()).default_open(true).show(ui, |ui| {
     titoletto(ui, "L'ORBITA");
     let mut prima = o.orbita;
     {
         let q = &mut prima;
-        let cursore = ui.add(egui::Slider::new(&mut q.a, 40.0..=250.0).text("grandezza, mas").custom_formatter(|v, _| format!("{v:.1}")));
+        let cursore = ui.add(egui::Slider::new(&mut q.a, 40.0..=250.0).text("grandezza dell'orbita").custom_formatter(|v, _| format!("{v:.1}")));
         crate::visite::segna(ui, "cursori", &cursore);
-        ui.add(egui::Slider::new(&mut q.e, 0.0..=0.98).text("schiacciamento").custom_formatter(|v, _| format!("{v:.3}")));
+        ui.add(egui::Slider::new(&mut q.e, 0.0..=0.98).text("quanto è allungata").custom_formatter(|v, _| format!("{v:.3}")));
         ui.add(egui::Slider::new(&mut q.i, 0.0..=180.0).text("inclinazione").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));
-        ui.add(egui::Slider::new(&mut q.nodo, 0.0..=360.0).text("orientamento").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));
-        ui.add(egui::Slider::new(&mut q.periastro, 0.0..=360.0).text("punto più vicino").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));
-        ui.add(egui::Slider::new(&mut q.t0, 1995.0..=2010.0).text("quando passa").custom_formatter(|v, _| format!("{v:.2}")));
-        ui.add(egui::Slider::new(&mut q.p, 5.0..=40.0).text("periodo, anni").custom_formatter(|v, _| format!("{v:.2}")));
-        ui.add(egui::Slider::new(&mut q.r0, 4.0..=13.0).text("distanza, kpc").custom_formatter(|v, _| format!("{v:.2}")));
+        ui.add(egui::Slider::new(&mut q.nodo, 0.0..=360.0).text("rotazione").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));
+        ui.add(egui::Slider::new(&mut q.periastro, 0.0..=360.0).text("dove è più vicina").suffix("°").custom_formatter(|v, _| format!("{v:.1}")));
+        ui.add(egui::Slider::new(&mut q.t0, 1995.0..=2010.0).text("anno del passaggio").custom_formatter(|v, _| format!("{v:.2}")));
+        ui.add(egui::Slider::new(&mut q.p, 5.0..=40.0).text("durata di un giro, anni").custom_formatter(|v, _| format!("{v:.2}")));
+        ui.add(egui::Slider::new(&mut q.r0, 4.0..=13.0).text("distanza da noi, kpc").custom_formatter(|v, _| format!("{v:.2}")));
     }
     if prima != o.orbita {
         o.orbita = prima;
         o.modo = "a mano";
         o.incertezze = None;
     }
-    ui.horizontal(|ui| {
-        if ui.button(RichText::new("Calcola la migliore").strong()).clicked() {
-            o.calcola();
-        }
-        if ui.small_button("Riparti").clicked() {
-            o.riparti();
-        }
-    });
     ui.checkbox(&mut o.vz_fissa, "Il buco nero è fermo lungo la linea di vista");
 
     titoletto(ui, "IL RISULTATO");
@@ -666,6 +677,7 @@ fn strumenti(ui: &mut egui::Ui, o: &mut Osservatorio) -> Option<SulBanco> {
             .small()
             .color(GRIGIO),
     );
+    });
     sul_banco
 }
 
