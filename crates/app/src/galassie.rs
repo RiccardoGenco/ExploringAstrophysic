@@ -1,7 +1,7 @@
 //! Banco delle galassie: la materia oscura come interruttore, e gli incontri.
 
 use crate::formato::decimale;
-use crate::pannello::{self, CHIARO, CIANO, FONDO, GIALLO, GRIGIO, LINEA, SUPERFICIE};
+use crate::pannello::{self, CHIARO, CIANO, FONDO, GIALLO, GRIGIO, LINEA, SUPERFICIE, VERDE};
 use colossi_fisica::galassie::{andromeda, incontro, stelle_lontane, una_galassia, Simulazione, UNITA_IN_MILIARDI_ANNI, VIA_LATTEA};
 use egui::{Align2, Color32, FontId, Frame, Margin, Mesh, PointerButton, Pos2, Rect, RichText, Sense, Shape, Stroke, Vec2};
 
@@ -9,8 +9,6 @@ const LARGHEZZA: f32 = 430.0;
 const N_STELLE: usize = 7000;
 const ALTEZZA_CURVA: f32 = 190.0;
 const R_CURVA: f64 = 40.0;
-const ARANCIO: Color32 = Color32::from_rgb(255, 196, 140);
-const AZZURRO: Color32 = Color32::from_rgb(165, 205, 255);
 const ROSSO: Color32 = Color32::from_rgb(255, 105, 95);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -122,16 +120,46 @@ fn cielo(ui: &mut egui::Ui, area: Rect, g: &mut BancoGalassie) {
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, FONDO);
 
+    // Alone di materia oscura: invisibile, ma e' lui che tiene insieme le stelle.
+    let forza = (g.sim.fattore_alone as f32).clamp(0.0, 3.0);
+    if forza > 0.0 {
+        for c in &g.sim.galassie {
+            let q = schermo(c.x[0], c.x[1]);
+            for k in (1..=14).rev() {
+                let f = k as f32 / 14.0;
+                p.circle_filled(q, (45.0 * px as f32) * f, Color32::from_rgb(150, 90, 230).gamma_multiply((0.012 * forza).min(0.05)));
+            }
+        }
+    }
+    for c in &g.sim.galassie {
+        let q = schermo(c.x[0], c.x[1]);
+        for k in (1..=6).rev() {
+            p.circle_filled(q, 4.0 + 5.0 * k as f32, Color32::from_rgb(255, 230, 170).gamma_multiply(0.05));
+        }
+    }
+    let centri: Vec<(f64, f64)> = g.sim.galassie.iter().map(|c| (c.x[0], c.x[1])).collect();
+
     let mut mesh = Mesh::default();
     mesh.reserve_triangles(g.sim.stelle.len() * 2);
     mesh.reserve_vertices(g.sim.stelle.len() * 4);
-    let lato = 0.9_f32;
+    let lato = 1.1_f32;
     for s in &g.sim.stelle {
         let q = schermo(f64::from(s.x[0]), f64::from(s.x[1]));
         if !area.contains(q) {
             continue;
         }
-        let tinta = if s.madre == 0 { AZZURRO } else { ARANCIO };
+        let d = centri
+            .iter()
+            .map(|c| ((f64::from(s.x[0]) - c.0).powi(2) + (f64::from(s.x[1]) - c.1).powi(2)).sqrt())
+            .fold(f64::MAX, f64::min);
+        let k = (d / 22.0).clamp(0.0, 1.0) as f32;
+        let base = if s.madre == 0 { [255.0, 240.0, 205.0] } else { [255.0, 205.0, 150.0] };
+        let fine = if s.madre == 0 { [110.0, 165.0, 255.0] } else { [255.0, 120.0, 90.0] };
+        let tinta = Color32::from_rgb(
+            (base[0] + (fine[0] - base[0]) * k) as u8,
+            (base[1] + (fine[1] - base[1]) * k) as u8,
+            (base[2] + (fine[2] - base[2]) * k) as u8,
+        );
         let k = mesh.vertices.len() as u32;
         mesh.colored_vertex(q + Vec2::new(-lato, -lato), tinta);
         mesh.colored_vertex(q + Vec2::new(lato, -lato), tinta);
@@ -215,62 +243,75 @@ fn curva_rotazione(ui: &mut egui::Ui, fattore: f64) {
 }
 
 fn strumenti(ui: &mut egui::Ui, g: &mut BancoGalassie) {
-    titoletto(ui, "SCENE");
-    ui.horizontal(|ui| {
+    ui.label(RichText::new("IL GIOCO").small().strong().color(GRIGIO));
+    let titolo = match g.scena {
+        Scena::Una => "Cosa tiene insieme una galassia?",
+        Scena::Incontro => "Cosa succede quando due galassie si sfiorano?",
+        Scena::Andromeda => "Noi e Andromeda ci scontreremo?",
+    };
+    ui.add(egui::Label::new(RichText::new(titolo).size(17.0).strong().color(CHIARO)).wrap());
+    ui.add_space(6.0);
+    ui.horizontal_wrapped(|ui| {
         for (scena, nome) in [(Scena::Una, "Una galassia"), (Scena::Incontro, "Due che si sfiorano"), (Scena::Andromeda, "Noi e Andromeda")] {
-            if ui.selectable_label(g.scena == scena, nome).clicked() {
+            if ui.add(egui::Button::new(nome).selected(g.scena == scena).min_size(Vec2::new(0.0, 28.0))).clicked() {
                 g.costruisci(scena);
             }
         }
     });
 
-    titoletto(ui, "MATERIA OSCURA");
-    let mut acceso = g.sim.fattore_alone > 0.0;
-    let accesa = ui.checkbox(&mut acceso, "Accesa");
+    titoletto(ui, "LA MATERIA OSCURA");
+    let acceso = g.sim.fattore_alone > 0.0;
+    let testo = if acceso { "Materia oscura: ACCESA  (premi per spegnerla)" } else { "Materia oscura: SPENTA  (premi per accenderla)" };
+    let accesa = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(RichText::new(testo).size(15.0).strong()).selected(acceso));
     crate::visite::segna(ui, "alone", &accesa);
-    if accesa.changed() {
-        g.sim.fattore_alone = if acceso { 1.0 } else { 0.0 };
+    if accesa.clicked() {
+        g.sim.fattore_alone = if acceso { 0.0 } else { 1.0 };
     }
-    ui.add(egui::Slider::new(&mut g.sim.fattore_alone, 0.0..=3.0).text("quantità, rispetto al vero").fixed_decimals(2));
-    curva_rotazione(ui, g.sim.fattore_alone);
+    ui.label(RichText::new("È la nube viola: non si vede, ma pesa e tiene le stelle in orbita.").color(GRIGIO));
 
-    if g.scena == Scena::Incontro {
-        titoletto(ui, "L'INCONTRO");
-        let prima = (g.passaggio, g.velocita, g.stesso_verso);
-        ui.add(egui::Slider::new(&mut g.passaggio, 0.0..=120.0).text("distanza di passaggio, kpc").fixed_decimals(0));
-        ui.add(egui::Slider::new(&mut g.velocita, 100.0..=1000.0).text("velocità relativa, km/s").fixed_decimals(0));
-        ui.checkbox(&mut g.stesso_verso, "Le due ruotano nello stesso verso");
-        if prima != (g.passaggio, g.velocita, g.stesso_verso) && ui.input(|i| !i.pointer.any_down()) {
-            g.costruisci(Scena::Incontro);
-        }
-    }
-    if g.scena != Scena::Una {
-        if ui.checkbox(&mut g.attrito, "Attrito dinamico: rallentano e si fondono").changed() {
-            g.sim.attrito = g.attrito;
-        }
-    }
-
-    titoletto(ui, "LETTURE");
+    titoletto(ui, "COSA VEDI");
     let lontane = stelle_lontane(&g.sim, 45.0);
     let totale = g.sim.stelle.len().max(1);
-    egui::Grid::new("letture_galassie").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
-        riga(ui, "Tempo", format!("{} miliardi di anni", decimale(g.sim.tempo_miliardi())));
-        riga(ui, "Stelle disperse", format!("{:.1} %", lontane as f64 / totale as f64 * 100.0).replace('.', ","));
-        riga(ui, "Velocità a 8 kpc", format!("{} km/s", decimale(VIA_LATTEA.v_circolare(8.0, g.sim.fattore_alone))));
-        if g.sim.galassie.len() > 1 {
-            riga(ui, "Distanza tra i centri", format!("{} kpc", decimale(g.sim.separazione())));
-        }
-    });
-    if g.sim.galassie.len() > 1 && g.sim.separazione() < 15.0 {
-        ui.label(RichText::new("I due centri sono ormai uno solo.").color(CIANO));
-    }
+    let perse = lontane as f32 / totale as f32;
+    let (barra, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 28.0), Sense::hover());
+    let pp = ui.painter_at(barra);
+    pp.rect_filled(barra, 6.0, LINEA);
+    pp.rect_filled(Rect::from_min_size(barra.min, Vec2::new(barra.width() * perse.clamp(0.0, 1.0), barra.height())), 6.0, if perse > 0.15 { ROSSO.gamma_multiply(0.7) } else { CIANO.gamma_multiply(0.5) });
+    pp.text(barra.center(), Align2::CENTER_CENTER, format!("Stelle che scappano: {:.0}%", perse * 100.0), FontId::proportional(14.0), Color32::WHITE);
     if g.sim.fattore_alone == 0.0 {
-        ui.label(RichText::new("Senza l'alone le stelle esterne hanno troppa velocità per restare.").color(ROSSO));
+        ui.label(RichText::new("Senza materia oscura le stelle esterne vanno troppo veloci per restare.").color(ROSSO));
+    } else if g.scena == Scena::Incontro && g.sim.galassie.len() > 1 && g.sim.separazione() < 15.0 {
+        ui.label(RichText::new("I due centri sono ormai uno solo.").color(CIANO));
+    } else {
+        ui.label(RichText::new("Le stelle restano al loro posto.").color(VERDE));
     }
-    ui.add_space(4.0);
-    ui.label(
-        RichText::new("Galassie come potenziali e stelle come particelle di prova, in un piano. Attrito approssimato.")
-            .small()
-            .color(GRIGIO),
-    );
+
+    ui.add_space(10.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
+        ui.add(egui::Slider::new(&mut g.sim.fattore_alone, 0.0..=3.0).text("quantità, rispetto al vero").fixed_decimals(2));
+        curva_rotazione(ui, g.sim.fattore_alone);
+
+        if g.scena == Scena::Incontro {
+            titoletto(ui, "L'INCONTRO");
+            let prima = (g.passaggio, g.velocita, g.stesso_verso);
+            ui.add(egui::Slider::new(&mut g.passaggio, 0.0..=120.0).text("distanza di passaggio, kpc").fixed_decimals(0));
+            ui.add(egui::Slider::new(&mut g.velocita, 100.0..=1000.0).text("velocità relativa, km/s").fixed_decimals(0));
+            ui.checkbox(&mut g.stesso_verso, "Le due ruotano nello stesso verso");
+            if prima != (g.passaggio, g.velocita, g.stesso_verso) && ui.input(|i| !i.pointer.any_down()) {
+                g.costruisci(Scena::Incontro);
+            }
+        }
+        if g.scena != Scena::Una && ui.checkbox(&mut g.attrito, "Attrito dinamico: rallentano e si fondono").changed() {
+            g.sim.attrito = g.attrito;
+        }
+        titoletto(ui, "LETTURE");
+        egui::Grid::new("letture_galassie").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
+            riga(ui, "Tempo", format!("{} miliardi di anni", decimale(g.sim.tempo_miliardi())));
+            riga(ui, "Velocità a 8 kpc", format!("{} km/s", decimale(VIA_LATTEA.v_circolare(8.0, g.sim.fattore_alone))));
+            if g.sim.galassie.len() > 1 {
+                riga(ui, "Distanza tra i centri", format!("{} kpc", decimale(g.sim.separazione())));
+            }
+        });
+        ui.label(RichText::new("Galassie come potenziali e stelle come particelle di prova, in un piano. Attrito approssimato.").small().color(GRIGIO));
+    });
 }
