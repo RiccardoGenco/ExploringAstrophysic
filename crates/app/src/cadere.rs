@@ -166,8 +166,17 @@ pub fn mostra(ui: &mut egui::Ui, c: &mut Cadere) {
         });
     egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
-        crate::visite::segna_rect(ui.ctx(), "scena", area);
-        grafico(ui, area, c);
+        let (scena, curva) = if area.width() > 900.0 {
+            let l = (area.width() * 0.42).min(560.0);
+            (Some(Rect::from_min_max(area.min, Pos2::new(area.left() + l, area.bottom()))), Rect::from_min_max(Pos2::new(area.left() + l, area.top()), area.max))
+        } else {
+            (None, area)
+        };
+        crate::visite::segna_rect(ui.ctx(), "scena", curva);
+        if let Some(s) = scena {
+            paesaggio(&ui.painter_at(s), s, c, ui.input(|i| i.time));
+        }
+        grafico(ui, curva, c);
     });
 }
 
@@ -362,4 +371,83 @@ fn grafico(ui: &mut egui::Ui, area: Rect, c: &mut Cadere) {
         FontId::proportional(13.0),
         CIANO,
     );
+}
+
+/// Il paesaggio: la palla che sale e scende davvero, con la scia del suo percorso.
+fn paesaggio(p: &Painter, r: Rect, c: &Cadere, tempo: f64) {
+    let (cielo, stelle) = match c.g {
+        g if g < 5.0 => (Color32::from_rgb(4, 5, 10), true),
+        g if g > 100.0 => (Color32::from_rgb(120, 60, 20), false),
+        g if g > 15.0 => (Color32::from_rgb(70, 50, 40), false),
+        _ => (Color32::from_rgb(20, 42, 62), false),
+    };
+    let mut mesh = Mesh::default();
+    for (punto, tinta) in [(r.left_top(), cielo), (r.right_top(), cielo), (r.left_bottom(), Color32::from_rgb(9, 11, 17)), (r.right_bottom(), Color32::from_rgb(9, 11, 17))] {
+        mesh.colored_vertex(punto, tinta);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(1, 3, 2);
+    p.add(mesh);
+    if stelle {
+        for i in 0..60u32 {
+            let x = (i.wrapping_mul(2654435761) >> 8) as f32 % 1000.0 / 1000.0;
+            let y = (i.wrapping_mul(40503).wrapping_add(7) >> 3) as f32 % 1000.0 / 1000.0;
+            p.circle_filled(Pos2::new(r.left() + x * r.width(), r.top() + y * r.height() * 0.8), 1.0 + (i % 3) as f32 * 0.4, Color32::from_white_alpha(170));
+        }
+    }
+    let suolo_y = r.bottom() - 70.0;
+    // Colline lontane.
+    let colline: Vec<Pos2> = (0..=40)
+        .map(|i| {
+            let x = r.left() + r.width() * i as f32 / 40.0;
+            Pos2::new(x, suolo_y - 18.0 - 14.0 * (i as f32 * 0.55).sin() - 8.0 * (i as f32 * 1.7).cos())
+        })
+        .chain([Pos2::new(r.right(), suolo_y), Pos2::new(r.left(), suolo_y)])
+        .collect();
+    p.add(Shape::convex_polygon(colline, Color32::from_rgb(25, 38, 48), Stroke::NONE));
+    p.rect_filled(Rect::from_min_max(Pos2::new(r.left(), suolo_y), r.right_bottom()), 0.0, Color32::from_rgb(30, 52, 40));
+    p.line_segment([Pos2::new(r.left(), suolo_y), Pos2::new(r.right(), suolo_y)], Stroke::new(2.0, GRIGIO));
+
+    let massimo = c.h.iter().copied().fold(1.0_f64, f64::max);
+    let alto_px = suolo_y - r.top() - 90.0;
+    let x_palla = r.center().x;
+    let y_di = |h: f64| suolo_y - 14.0 - alto_px * (h / massimo) as f32;
+
+    // Scia: dove la palla e' gia' passata.
+    let k = c.avanzamento;
+    let passi = (k * INTERVALLI as f64) as usize;
+    let mut scia = Vec::new();
+    for i in 0..=passi.min(INTERVALLI) {
+        scia.push(Pos2::new(x_palla, y_di(c.h[i])));
+    }
+    for (j, w) in scia.windows(2).enumerate() {
+        let a = j as f32 / scia.len().max(1) as f32;
+        p.line_segment([w[0], w[1]], Stroke::new(1.0 + 3.0 * a, PALLA.gamma_multiply(0.15 + 0.6 * a)));
+    }
+    let quota = c.altezza_interpolata(&c.h, k);
+    if c.soluzione {
+        let q = c.altezza_interpolata(&c.libera(), k);
+        p.circle_stroke(Pos2::new(x_palla + 34.0, y_di(q)), 10.0, Stroke::new(2.0, VERDE));
+        p.text(Pos2::new(x_palla + 52.0, y_di(q)), Align2::LEFT_CENTER, "caduta libera", FontId::proportional(12.0), VERDE);
+    }
+    // La palla brilla di verde quando il suo percorso e' quello libero.
+    let f = frazione_del_massimo(c).clamp(0.0, 1.0) as f32;
+    let tinta = Color32::from_rgb(
+        (255.0 - 145.0 * f) as u8,
+        (160.0 + 65.0 * f) as u8,
+        (90.0 + 40.0 * f) as u8,
+    );
+    let centro = Pos2::new(x_palla, y_di(quota));
+    p.circle_filled(centro, 22.0 + 6.0 * f * (tempo as f32 * 4.0).sin().abs(), tinta.gamma_multiply(0.18));
+    p.circle_filled(centro, 12.0, tinta);
+    p.line_segment([Pos2::new(x_palla, suolo_y), Pos2::new(x_palla, centro.y + 14.0)], Stroke::new(1.0, LINEA));
+    // Ombra sul suolo, piu' piccola quanto piu' sale.
+    let ombra = 14.0 - 6.0 * (quota / massimo) as f32;
+    p.add(Shape::ellipse_filled(Pos2::new(x_palla, suolo_y + 6.0), Vec2::new(ombra, 3.5), Color32::from_black_alpha(140)));
+
+    p.text(r.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "La palla vista da chi sta a terra", FontId::proportional(14.0), CHIARO);
+    let nome = GRAVITA.iter().find(|(_, g)| (*g - c.g).abs() < 1e-9).map_or("", |(n, _)| *n);
+    p.text(r.left_bottom() + Vec2::new(14.0, -14.0), Align2::LEFT_BOTTOM, format!("Su {nome}"), FontId::proportional(13.0), GRIGIO);
+    let giudizio = if f > 0.98 { "Il suo orologio segna il massimo: è una vera caduta." } else { "Il suo orologio potrebbe segnare di più." };
+    p.text(r.center_bottom() + Vec2::new(0.0, -14.0), Align2::CENTER_BOTTOM, giudizio, FontId::proportional(13.0), if f > 0.98 { VERDE } else { GRIGIO });
 }
