@@ -303,6 +303,8 @@ fn grafici(ui: &mut egui::Ui, area: Rect, o: &mut Osservatorio) {
 
     let vista = VistaCielo::nuova(cielo, o);
     disegna_cielo(&p, cielo, &vista, o);
+    stella_in_moto(&p, cielo, &vista, o, ui.input(|i| i.time));
+    ui.ctx().request_repaint();
     let scala_v = disegna_velocita(&p, piano_velocita, o);
 
     if risposta.clicked() {
@@ -326,6 +328,38 @@ fn grafici(ui: &mut egui::Ui, area: Rect, o: &mut Osservatorio) {
         testo,
         CIANO,
     );
+}
+
+/// La stella che gira davvero attorno al buco nero, con la scia dei mesi appena passati.
+fn stella_in_moto(p: &Painter, piano: Rect, v: &VistaCielo, o: &Osservatorio, tempo: f64) {
+    let periodo = o.orbita.p.max(0.5);
+    let t_ora = o.orbita.t0 + (tempo * 0.9) % periodo;
+    // Scia: l'ultimo ottavo di orbita.
+    let punti: Vec<Pos2> = (0..=40)
+        .map(|i| {
+            let (e, n) = o.orbita.posizione(t_ora - periodo * 0.12 * (1.0 - f64::from(i) / 40.0));
+            v.a_schermo(e, n)
+        })
+        .collect();
+    for (i, w) in punti.windows(2).enumerate() {
+        let a = i as f32 / 40.0;
+        p.line_segment([w[0], w[1]], Stroke::new(1.0 + 3.0 * a, Color32::from_rgb(255, 230, 150).gamma_multiply(0.1 + 0.6 * a)));
+    }
+    let (e, n) = o.orbita.posizione(t_ora);
+    let s = v.a_schermo(e, n);
+    for k in (1..=4).rev() {
+        p.circle_filled(s, 5.0 + 4.0 * k as f32, Color32::from_rgb(255, 220, 120).gamma_multiply(0.07));
+    }
+    p.circle_filled(s, 5.5, Color32::from_rgb(255, 240, 190));
+    // Il buco nero al centro, con un anello di luce.
+    let c = v.a_schermo(o.orbita.x0, o.orbita.y0);
+    for k in (1..=4).rev() {
+        p.circle_filled(c, 6.0 + 3.5 * k as f32, ARANCIO.gamma_multiply(0.06));
+    }
+    p.circle_filled(c, 6.0, Color32::BLACK);
+    p.circle_stroke(c, 7.0, Stroke::new(1.5, ARANCIO));
+    let anno = o.orbita.t0 + (tempo * 0.9) % periodo;
+    p.text(piano.right_top() + Vec2::new(-10.0, 8.0), Align2::RIGHT_TOP, format!("anno {:.1}", anno).replace('.', ","), FontId::monospace(14.0), CHIARO);
 }
 
 fn disegna_cielo(p: &Painter, piano: Rect, v: &VistaCielo, o: &Osservatorio) {
