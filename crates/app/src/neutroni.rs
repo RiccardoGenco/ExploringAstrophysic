@@ -198,7 +198,12 @@ pub fn mostra(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
         });
     egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
-        grafico(ui, area, n);
+        let taglio = area.top() + area.height() * 0.58;
+        let alto = Rect::from_min_max(area.min, Pos2::new(area.right(), taglio));
+        let basso = Rect::from_min_max(Pos2::new(area.left(), taglio), area.max);
+        scena(&ui.painter_at(alto), alto, n, ui.input(|i| i.time));
+        ui.ctx().request_repaint();
+        grafico(ui, basso, n);
     });
     apri
 }
@@ -343,53 +348,95 @@ fn colore_densita(rho: f64) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
 }
 
-fn vista_stella(ui: &mut egui::Ui, n: &Neutroni) {
-    let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), ALTEZZA_STELLA), Sense::hover());
-    let p = ui.painter_at(area);
-    p.rect_filled(area, 3.0, FONDO);
-    p.rect_stroke(area, 3.0, Stroke::new(1.0, LINEA), egui::StrokeKind::Inside);
-    let centro = area.center();
-    let scala = area.height() * 0.5 / KM_VISTA;
+/// La stella grande al centro: strati, fari della pulsar, materia che cade, crollo, buco nero.
+fn scena(p: &Painter, area: Rect, n: &Neutroni, tempo: f64) {
+    p.rect_filled(area, 0.0, FONDO);
+    for i in 0..120u32 {
+        let x = (i.wrapping_mul(2654435761) >> 8) as f32 % 1000.0 / 1000.0;
+        let y = (i.wrapping_mul(40503).wrapping_add(13) >> 3) as f32 % 1000.0 / 1000.0;
+        let l = 0.5 + 0.5 * ((tempo as f32) * (0.5 + (i % 7) as f32 * 0.2) + i as f32).sin();
+        p.circle_filled(area.min + Vec2::new(x * area.width(), y * area.height()), 0.7 + (i % 3) as f32 * 0.4, Color32::from_white_alpha((60.0 + 90.0 * l) as u8));
+    }
+    let centro = area.center() + Vec2::new(0.0, 8.0);
+    let scala = area.height() * 0.5 * 0.82 / KM_VISTA;
     let s = n.stella();
     let rs = s.raggio_schwarzschild() as f32;
-
-    let cerchio_tratteggiato = |r: f32, tinta: Color32| {
-        let punti: Vec<Pos2> = (0..=160)
-            .map(|i| {
-                let a = i as f32 / 160.0 * TAU;
-                centro + Vec2::new(a.cos(), a.sin()) * r
-            })
-            .collect();
-        p.extend(Shape::dashed_line(&punti, Stroke::new(1.2, tinta), 5.0, 4.0));
-    };
+    let t = tempo as f32;
 
     match n.fase {
         Fase::BucoNero => {
-            p.circle_filled(centro, rs * scala, Color32::BLACK);
-            p.circle_stroke(centro, rs * scala, Stroke::new(2.0, CIANO));
+            // Disco di materia che gira e luce piegata attorno all'orizzonte.
+            let r = rs * scala;
+            for k in (1..=9).rev() {
+                let f = k as f32 / 9.0;
+                p.circle_filled(centro, r * (1.0 + 1.6 * f), Color32::from_rgb(255, 150, 60).gamma_multiply(0.035));
+            }
+            for j in 0..90 {
+                let a = j as f32 / 90.0 * TAU + t * 1.3;
+                let rr = r * (1.5 + 0.9 * ((j * 37 % 50) as f32 / 50.0));
+                let piatto = Vec2::new(a.cos() * rr * 1.6, a.sin() * rr * 0.35);
+                let caldo = 1.0 - (rr / (r * 2.4)).clamp(0.0, 1.0);
+                p.circle_filled(centro + piatto, 1.6 + 1.5 * caldo, Color32::from_rgb(255, (170.0 + 70.0 * caldo) as u8, (80.0 + 110.0 * caldo) as u8).gamma_multiply(0.85));
+            }
+            p.circle_filled(centro, r, Color32::BLACK);
+            p.circle_stroke(centro, r, Stroke::new(2.5, Color32::from_rgb(255, 210, 140)));
+            p.text(centro + Vec2::new(0.0, r + 22.0), Align2::CENTER_CENTER, format!("orizzonte: {} km", decimale(s.raggio_schwarzschild())), FontId::proportional(14.0), CIANO);
         }
         fase => {
-            let k = match fase {
-                Fase::Crollo(t) => 1.0 - ((t / DURATA_CROLLO) as f32).powi(3),
-                _ => 1.0,
+            let (k, crollo) = match fase {
+                Fase::Crollo(tc) => (1.0 - ((tc / DURATA_CROLLO) as f32).powi(3), (tc / DURATA_CROLLO) as f32),
+                _ => (1.0, 0.0),
             };
             let r_vis = rs + (s.raggio as f32 - rs) * k;
             let fattore = r_vis / s.raggio as f32;
+            let tremore = if crollo > 0.0 { 4.0 * crollo } else { 0.0 };
+            let c = centro + Vec2::new((t * 55.0).sin(), (t * 47.0).cos()) * tremore;
+            // Fari della pulsar: due coni che ruotano.
+            if crollo == 0.0 {
+                for lato in [0.0_f32, std::f32::consts::PI] {
+                    let a = t * 2.6 + lato;
+                    let d = Vec2::new(a.cos(), a.sin());
+                    let lungo = area.width().min(area.height() * 2.0);
+                    let lato_v = d.rot90() * 26.0;
+                    p.add(Shape::convex_polygon(
+                        vec![c + d * (r_vis * scala), c + d * lungo + lato_v, c + d * lungo - lato_v],
+                        Color32::from_rgb(150, 210, 255).gamma_multiply(0.07),
+                        Stroke::NONE,
+                    ));
+                }
+            }
+            for k2 in (1..=6).rev() {
+                let f = k2 as f32 / 6.0;
+                p.circle_filled(c, r_vis * scala * (1.0 + 0.5 * f), Color32::from_rgb(130, 180, 255).gamma_multiply(0.05));
+            }
             for strato in s.profilo.iter().rev() {
                 let raggio = if strato.r == 0.0 { 0.0 } else { strato.r as f32 };
                 if raggio > 0.0 {
-                    p.circle_filled(centro, raggio * fattore * scala, colore_densita(strato.rho));
+                    p.circle_filled(c, raggio * fattore * scala, colore_densita(strato.rho));
                 }
             }
-            cerchio_tratteggiato(rs * scala, CIANO.gamma_multiply(0.85));
+            p.circle_stroke(c, r_vis * scala, Stroke::new(1.5, Color32::from_white_alpha(120)));
+            // Il bagliore finale del crollo.
+            if crollo > 0.75 {
+                let f = ((crollo - 0.75) / 0.25).clamp(0.0, 1.0);
+                p.circle_filled(c, r_vis * scala * (1.0 + 2.0 * f), Color32::from_white_alpha((200.0 * (1.0 - f)) as u8));
+            }
+            // Materia che cade sulla stella mentre tieni premuto.
+            if n.aggiungi && crollo == 0.0 {
+                for j in 0..36 {
+                    let fase_j = (t * 0.9 + j as f32 * 0.137).fract();
+                    let a = j as f32 * 2.399;
+                    let dist = (r_vis * scala) + (area.height() * 0.45) * (1.0 - fase_j);
+                    let q = c + Vec2::new(a.cos(), a.sin()) * dist;
+                    p.circle_filled(q, 2.2, Color32::from_rgb(255, 210, 120).gamma_multiply(0.4 + 0.6 * fase_j));
+                }
+            }
         }
     }
-
-    cerchio_tratteggiato(RAGGIO_RACCORDO * scala, VERDE);
-    let f = FontId::proportional(11.0);
-    p.text(area.left_top() + Vec2::new(8.0, 6.0), Align2::LEFT_TOP, "SEZIONE, IN SCALA", FontId::proportional(10.5), CHIARO);
-    p.text(area.left_bottom() + Vec2::new(8.0, -22.0), Align2::LEFT_BOTTOM, "- - Grande Raccordo Anulare", f.clone(), VERDE);
-    p.text(area.left_bottom() + Vec2::new(8.0, -7.0), Align2::LEFT_BOTTOM, "- - dove sarebbe l'orizzonte", f, CIANO);
+    p.text(area.left_top() + Vec2::new(16.0, 12.0), Align2::LEFT_TOP, if n.fase == Fase::Stella { "Una stella di neutroni, in scala" } else { "Il crollo" }, FontId::proportional(15.0), CHIARO);
+    p.text(area.left_bottom() + Vec2::new(16.0, -10.0), Align2::LEFT_BOTTOM, format!("Per confronto, il Grande Raccordo Anulare di Roma ha un raggio di {} km (cerchio verde).", decimale(f64::from(RAGGIO_RACCORDO))), FontId::proportional(12.0), VERDE);
+    let anello: Vec<Pos2> = (0..=160).map(|i| { let a = i as f32 / 160.0 * TAU; centro + Vec2::new(a.cos(), a.sin()) * (RAGGIO_RACCORDO * scala) }).collect();
+    p.extend(Shape::dashed_line(&anello, Stroke::new(1.0, VERDE.gamma_multiply(0.6)), 5.0, 5.0));
 }
 
 fn riga(ui: &mut egui::Ui, nome: &str, valore: String) {
@@ -403,15 +450,18 @@ fn titoletto(ui: &mut egui::Ui, testo: &str) {
     ui.label(RichText::new(testo).small().strong().color(GRIGIO));
 }
 
-fn conseguenze(ui: &mut egui::Ui, s: &Stella) {
+fn conseguenze(ui: &mut egui::Ui, s: &Stella, tutte: bool) {
     let g = s.gravita_superficie();
     let tonnellate = s.densita_media() * 5e-6 / 1e3;
     egui::Grid::new("conseguenze").num_columns(2).spacing([14.0, 3.0]).show(ui, |ui| {
-        riga(ui, "Massa", format!("{} masse solari", decimale(s.massa)));
         riga(ui, "Raggio", format!("{} km", decimale(s.raggio)));
-        riga(ui, "Densità al centro", format!("{} volte l'acqua", grande(s.rho_centrale * 1e3 / DENSITA_ACQUA)));
         riga(ui, "Un cucchiaino pesa", format!("{} tonnellate", grande(tonnellate)));
         riga(ui, "Il tuo peso", format!("{} volte tanto", grande(g / G_TERRA)));
+        if !tutte {
+            return;
+        }
+        riga(ui, "Massa", format!("{} masse solari", decimale(s.massa)));
+        riga(ui, "Densità al centro", format!("{} volte l'acqua", grande(s.rho_centrale * 1e3 / DENSITA_ACQUA)));
         riga(ui, "Cadere da un metro", format!("{} km/s", grande((2.0 * g).sqrt() / 1e3)));
         riga(ui, "Per scappare serve", format!("{} c", decimale(s.fuga())));
         riga(ui, "Un anno sulla superficie", format!("{} anni fuori", decimale(s.anni_lontano())));
@@ -436,26 +486,45 @@ fn verdetto_misura(ui: &mut egui::Ui, m: &Misura, curva: &Curva) {
     });
 }
 
+fn conseguenze_se_stella(ui: &mut egui::Ui, n: &Neutroni) {
+    if n.fase == Fase::Stella {
+        titoletto(ui, "TUTTI I NUMERI");
+        conseguenze(ui, n.stella(), true);
+    }
+}
+
 fn strumenti(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
     let mut apri = None;
-    vista_stella(ui, n);
-    ui.add_space(6.0);
 
     match n.fase {
         Fase::Stella => {
             ui.horizontal(|ui| {
-                let bottone = ui.add_sized([180.0, 30.0], egui::Button::new(RichText::new("Aggiungi materia").strong()));
+                let bottone = ui.add_sized([ui.available_width() - 110.0, 46.0], egui::Button::new(RichText::new("Aggiungi materia").size(18.0).strong()));
                 crate::visite::segna(ui, "aggiungi", &bottone);
                 // Un pulsante smette di risultare premuto dopo un attimo: si guarda il mouse.
                 n.aggiungi = bottone.contains_pointer() && ui.input(|i| i.pointer.primary_down());
                 ui.label(RichText::new("tieni premuto").color(GRIGIO));
+            });
+            {
+                let massima = n.curva.massa_massima();
+                let ora = n.stella().massa;
+                let (barra, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 26.0), Sense::hover());
+                let pp = ui.painter_at(barra);
+                pp.rect_filled(barra, 6.0, LINEA);
+                let k = (ora / massima.max(1e-9)).clamp(0.0, 1.0) as f32;
+                let tinta = Color32::from_rgb((90.0 + 165.0 * k * k) as u8, (215.0 - 130.0 * k * k) as u8, (255.0 - 170.0 * k * k) as u8);
+                pp.rect_filled(Rect::from_min_size(barra.min, Vec2::new(barra.width() * k, barra.height())), 6.0, tinta.gamma_multiply(0.7));
+                pp.text(barra.center(), Align2::CENTER_CENTER, format!("{} masse solari  ·  crolla a {}", decimale(ora), decimale(massima)), FontId::proportional(14.0), Color32::WHITE);
+            }
+            ui.scope(|_| {});
+            ui.horizontal(|_ui| {
             });
             let s = n.stella();
             if (n.indice as usize) > n.curva.indice_massimo {
                 ui.label(RichText::new("Questa stella non regge: al primo disturbo crollerebbe.").color(ROSSO));
             }
             titoletto(ui, "SE FOSSI LÌ");
-            conseguenze(ui, s);
+            conseguenze(ui, s, false);
         }
         _ => {
             n.aggiungi = false;
@@ -479,6 +548,23 @@ fn strumenti(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
         }
     }
 
+    titoletto(ui, "DI CHE COSA È FATTA? SCEGLI UN MODELLO");
+    let elenco = ui.horizontal_wrapped(|ui| {
+        let mut scelta = None;
+        for (i, (nome, _, _)) in CATALOGO.iter().enumerate() {
+            if ui.selectable_label(n.catalogo == Some(i), *nome).clicked() {
+                scelta = Some(i);
+            }
+        }
+        if let Some(i) = scelta {
+            n.cambia_materia(CATALOGO[i].1, Some(i));
+        }
+    });
+    crate::visite::segna(ui, "materia", &elenco.response);
+
+    ui.add_space(8.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
+        conseguenze_se_stella(ui, n);
     titoletto(ui, "LE MISURE VERE");
     for m in &MISURE {
         verdetto_misura(ui, m, &n.curva);
@@ -502,42 +588,29 @@ fn strumenti(ui: &mut egui::Ui, n: &mut Neutroni) -> Option<f64> {
         ui.label(RichText::new(format!("Audio non disponibile: {e}")).color(GIALLO));
     }
 
-    titoletto(ui, "LA MATERIA");
-    let elenco = ui.horizontal_wrapped(|ui| {
-        let mut scelta = None;
-        for (i, (nome, _, _)) in CATALOGO.iter().enumerate() {
-            if ui.selectable_label(n.catalogo == Some(i), *nome).clicked() {
-                scelta = Some(i);
-            }
+        let mut p = n.parametri;
+        let mut cambiato = false;
+        cambiato |= ui.add(egui::Slider::new(&mut p.log_p1, 33.6..=35.2).text("durezza media").custom_formatter(|v, _| format!("{v:.2}"))).changed();
+        cambiato |= ui.add(egui::Slider::new(&mut p.gamma1, 1.8..=4.5).text("indice, basse").custom_formatter(|v, _| format!("{v:.2}"))).changed();
+        cambiato |= ui.add(egui::Slider::new(&mut p.gamma2, 1.2..=4.5).text("indice, medie").custom_formatter(|v, _| format!("{v:.2}"))).changed();
+        cambiato |= ui.add(egui::Slider::new(&mut p.gamma3, 1.2..=4.5).text("indice, alte").custom_formatter(|v, _| format!("{v:.2}"))).changed();
+        if cambiato {
+            n.cambia_materia(p, None);
         }
-        if let Some(i) = scelta {
-            n.cambia_materia(CATALOGO[i].1, Some(i));
+        if n.impossibile {
+            ui.label(RichText::new("Questo nucleo non si raccorda con la crosta: curva non aggiornata.").color(ROSSO));
         }
+        let centrale = n.curva.stelle[n.curva.indice_massimo].suono2_centrale.sqrt();
+        if centrale >= 1.0 {
+            ui.label(RichText::new(format!("Al centro il suono andrebbe a {} c: impossibile.", decimale(centrale))).color(ROSSO));
+        }
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new("Materia: Read et al. 2009, crosta SLy. Stelle ferme, senza rotazione.")
+                .small()
+                .color(GRIGIO),
+        );
     });
-    crate::visite::segna(ui, "materia", &elenco.response);
-
-    let mut p = n.parametri;
-    let mut cambiato = false;
-    cambiato |= ui.add(egui::Slider::new(&mut p.log_p1, 33.6..=35.2).text("durezza media").custom_formatter(|v, _| format!("{v:.2}"))).changed();
-    cambiato |= ui.add(egui::Slider::new(&mut p.gamma1, 1.8..=4.5).text("indice, basse").custom_formatter(|v, _| format!("{v:.2}"))).changed();
-    cambiato |= ui.add(egui::Slider::new(&mut p.gamma2, 1.2..=4.5).text("indice, medie").custom_formatter(|v, _| format!("{v:.2}"))).changed();
-    cambiato |= ui.add(egui::Slider::new(&mut p.gamma3, 1.2..=4.5).text("indice, alte").custom_formatter(|v, _| format!("{v:.2}"))).changed();
-    if cambiato {
-        n.cambia_materia(p, None);
-    }
-    if n.impossibile {
-        ui.label(RichText::new("Questo nucleo non si raccorda con la crosta: curva non aggiornata.").color(ROSSO));
-    }
-    let centrale = n.curva.stelle[n.curva.indice_massimo].suono2_centrale.sqrt();
-    if centrale >= 1.0 {
-        ui.label(RichText::new(format!("Al centro il suono andrebbe a {} c: impossibile.", decimale(centrale))).color(ROSSO));
-    }
-    ui.add_space(4.0);
-    ui.label(
-        RichText::new("Materia: Read et al. 2009, crosta SLy. Stelle ferme, senza rotazione.")
-            .small()
-            .color(GRIGIO),
-    );
     apri
 }
 

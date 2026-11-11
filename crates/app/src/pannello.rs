@@ -983,6 +983,11 @@ mod prove {
         for (nome, stanza) in stanze {
             let mut s = Simulatore::nuovo();
             s.stato.stanza = stanza;
+            match nome {
+                "cadere" => s.stato.cadere.avanzamento = 0.5,
+                "gemelli" => s.stato.gemelli.avanzamento = 0.5,
+                _ => {}
+            }
             for _ in 0..90 {
                 s.giro();
             }

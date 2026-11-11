@@ -180,11 +180,6 @@ pub fn mostra(ui: &mut egui::Ui, c: &mut Cadere) {
     });
 }
 
-fn titoletto(ui: &mut egui::Ui, testo: &str) {
-    ui.add_space(10.0);
-    ui.label(RichText::new(testo).small().strong().color(GRIGIO));
-}
-
 fn barra(ui: &mut egui::Ui, nome: &str, valore: f64, massimo: f64, tinta: Color32) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(nome).color(GRIGIO));
@@ -206,52 +201,84 @@ fn strumenti(ui: &mut egui::Ui, c: &mut Cadere) {
     let totale = quota - velocita;
     let (quota_l, velocita_l) = scarto_orologio(&c.libera(), dt, c.g);
     let migliore = quota_l - velocita_l;
+    let frazione = frazione_del_massimo(c).clamp(0.0, 1.0);
+    let perfetto = frazione > 0.98;
 
-    ui.label(RichText::new("Il suo orologio, rispetto a chi resta a terra").color(GRIGIO));
-    let tinta = if (totale - migliore).abs() < migliore.abs() * 0.002 { VERDE } else { CHIARO };
-    ui.label(RichText::new(minuscolo(totale)).monospace().size(30.0).strong().color(tinta));
+    ui.label(RichText::new("IL GIOCO").small().strong().color(GRIGIO));
+    ui.add(egui::Label::new(RichText::new("Fai segnare all'orologio della palla più tempo che puoi.").size(17.0).strong().color(CHIARO)).wrap());
     ui.add_space(4.0);
+    ui.add(egui::Label::new(RichText::new("La palla deve partire e arrivare nei due istanti fissati. Trascina la curva arancione: sopra, nel punto più alto, il tempo scorre più in fretta, ma salire e scendere costa velocità.").color(GRIGIO)).wrap());
+    ui.add_space(10.0);
 
-    let massimo = quota.abs().max(velocita.abs()).max(migliore.abs());
-    barra(ui, "Guadagnato stando in alto", quota, massimo, CIANO);
-    barra(ui, "Perso andando veloce", velocita, massimo, GIALLO);
-    barra(ui, "Il massimo possibile", migliore, massimo, VERDE);
+    // Il metro grande: quanto ti avvicini al massimo possibile.
+    let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), Sense::hover());
+    let p = ui.painter_at(area);
+    p.rect_filled(area, 8.0, LINEA);
+    let tinta = if perfetto { VERDE } else { Color32::from_rgb(255, 160, 90) };
+    let riempi = Rect::from_min_size(area.min, Vec2::new(area.width() * frazione as f32, area.height()));
+    p.rect_filled(riempi, 8.0, tinta.gamma_multiply(0.6));
+    p.text(area.center(), Align2::CENTER_CENTER, format!("{:.0}% del massimo", frazione * 100.0), FontId::proportional(20.0), Color32::WHITE);
+    ui.add_space(4.0);
+    let messaggio = if perfetto {
+        "Perfetto! Questa è una vera caduta libera: nessuna forza, solo il percorso più lungo per l'orologio."
+    } else if frazione > 0.7 {
+        "Quasi! Ammorbidisci la curva: più dolce è, meglio è."
+    } else if frazione > 0.3 {
+        "Stai migliorando. Prova a rendere la curva più rotonda."
+    } else {
+        "Parti da qui: la punta è un percorso brutto. Prova ad abbassarla e allargarla."
+    };
+    ui.add(egui::Label::new(RichText::new(messaggio).color(if perfetto { VERDE } else { CHIARO })).wrap());
 
-    titoletto(ui, "PROVA");
+    ui.add_space(12.0);
+    ui.label(RichText::new("AIUTI").small().strong().color(GRIGIO));
+    let natura = ui.add_sized([ui.available_width(), 36.0], egui::Button::new(RichText::new(if c.natura { "La natura sta cercando il massimo…" } else { "Lascia fare alla natura" }).size(15.0)).selected(c.natura));
+    if natura.clicked() {
+        c.natura = !c.natura;
+    }
+    crate::visite::segna(ui, "natura", &natura);
     ui.horizontal(|ui| {
-        let natura = ui.toggle_value(&mut c.natura, "Lascia fare alla natura");
-        crate::visite::segna(ui, "natura", &natura);
         ui.toggle_value(&mut c.soluzione, "Mostra la caduta libera");
-    });
-    ui.horizontal(|ui| {
-        if ui.small_button("A punta").clicked() {
+        if ui.button("Ricomincia dalla punta").clicked() {
             c.tenda();
+            c.natura = false;
         }
-        if ui.small_button("Immobile").clicked() {
+        if ui.button("Palla ferma").clicked() {
             c.piatto();
+            c.natura = false;
         }
     });
 
-    titoletto(ui, "CHI GUARDA");
-    ui.horizontal(|ui| {
-        ui.selectable_value(&mut c.cornice_caduta, false, "Da terra");
-        ui.selectable_value(&mut c.cornice_caduta, true, "Da chi cade");
+    ui.add_space(10.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
+        ui.label(RichText::new("Dove cade").small().color(GRIGIO));
+        ui.horizontal(|ui| {
+            for (nome, g) in GRAVITA {
+                ui.selectable_value(&mut c.g, g, nome);
+            }
+        });
+        ui.add(egui::Slider::new(&mut c.durata, 0.5..=8.0).text("secondi di volo").fixed_decimals(1));
+        ui.add_space(6.0);
+        ui.label(RichText::new("Chi guarda").small().color(GRIGIO));
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut c.cornice_caduta, false, "Da terra");
+            ui.selectable_value(&mut c.cornice_caduta, true, "Da chi cade");
+        });
+        ui.add_space(6.0);
+        ui.label(RichText::new("Il suo orologio, rispetto a chi resta a terra").color(GRIGIO));
+        ui.label(RichText::new(minuscolo(totale)).monospace().size(22.0).strong().color(CHIARO));
+        let massimo = quota.abs().max(velocita.abs()).max(migliore.abs());
+        barra(ui, "Guadagnato stando in alto", quota, massimo, CIANO);
+        barra(ui, "Perso andando veloce", velocita, massimo, GIALLO);
+        barra(ui, "Il massimo possibile", migliore, massimo, VERDE);
+        ui.label(
+            RichText::new(format!(
+                "Ogni metro di quota accelera l'orologio di {} parti su un miliardo di miliardi.",
+                format!("{:.1}", c.g / (C * C) * 1e18).replace('.', ",")
+            ))
+            .color(GRIGIO),
+        );
     });
-
-    titoletto(ui, "DOVE");
-    ui.horizontal(|ui| {
-        for (nome, g) in GRAVITA {
-            ui.selectable_value(&mut c.g, g, nome);
-        }
-    });
-    ui.add(egui::Slider::new(&mut c.durata, 0.5..=8.0).text("secondi di volo").fixed_decimals(1));
-    ui.label(
-        RichText::new(format!(
-            "Ogni metro di quota accelera l'orologio di {} parti su un miliardo di miliardi.",
-            format!("{:.1}", c.g / (C * C) * 1e18).replace('.', ",")
-        ))
-        .color(GRIGIO),
-    );
 }
 
 fn sfondo(p: &Painter, piano: Rect) {
@@ -360,16 +387,9 @@ fn grafico(ui: &mut egui::Ui, area: Rect, c: &mut Cadere) {
     p.text(
         area.left_top() + Vec2::new(14.0, 12.0),
         Align2::LEFT_TOP,
-        "Trascina la curva arancione: una palla deve partire e arrivare in questi due istanti. Cerca di far segnare di più al suo orologio.",
-        etichetta.clone(),
-        GRIGIO,
-    );
-    p.text(
-        area.left_top() + Vec2::new(14.0, 32.0),
-        Align2::LEFT_TOP,
-        "Nessuna forza la tira giù: segue il percorso in cui il suo tempo è il più lungo, e quel percorso è una caduta.",
-        FontId::proportional(13.0),
-        CIANO,
+        "Trascina la curva arancione",
+        FontId::proportional(15.0),
+        CHIARO,
     );
 }
 
@@ -410,40 +430,41 @@ fn paesaggio(p: &Painter, r: Rect, c: &Cadere, tempo: f64) {
 
     let massimo = c.h.iter().copied().fold(1.0_f64, f64::max);
     let alto_px = suolo_y - r.top() - 90.0;
-    let x_palla = r.center().x;
-    let y_di = |h: f64| suolo_y - 14.0 - alto_px * (h / massimo) as f32;
-
-    // Scia: dove la palla e' gia' passata.
+    let (x_a, x_b) = (r.left() + 50.0, r.right() - 50.0);
     let k = c.avanzamento;
-    let passi = (k * INTERVALLI as f64) as usize;
-    let mut scia = Vec::new();
-    for i in 0..=passi.min(INTERVALLI) {
-        scia.push(Pos2::new(x_palla, y_di(c.h[i])));
+    let x_di = |k: f64| x_a + (x_b - x_a) * k as f32;
+    let y_di = |h: f64| suolo_y - 14.0 - alto_px * (h / massimo) as f32;
+    let punto_di = |k: f64| Pos2::new(x_di(k), y_di(c.altezza_interpolata(&c.h, k.min(0.9999))));
+
+    // L'intero percorso, tenue, e la scia luminosa di dove e' gia' passata.
+    let tutto: Vec<Pos2> = (0..=60).map(|i| punto_di(f64::from(i) / 60.0)).collect();
+    p.add(Shape::dashed_line(&tutto, Stroke::new(1.0, Color32::from_white_alpha(40)), 4.0, 6.0));
+    let recente = 0.35;
+    for i in 0..40 {
+        let k0 = (k - recente * f64::from(40 - i) / 40.0).max(0.0);
+        let k1 = (k - recente * f64::from(39 - i) / 40.0).max(0.0);
+        let a = i as f32 / 40.0;
+        p.line_segment([punto_di(k0), punto_di(k1)], Stroke::new(1.0 + 4.0 * a, PALLA.gamma_multiply(0.05 + 0.7 * a)));
     }
-    for (j, w) in scia.windows(2).enumerate() {
-        let a = j as f32 / scia.len().max(1) as f32;
-        p.line_segment([w[0], w[1]], Stroke::new(1.0 + 3.0 * a, PALLA.gamma_multiply(0.15 + 0.6 * a)));
-    }
-    let quota = c.altezza_interpolata(&c.h, k);
+    let quota = c.altezza_interpolata(&c.h, k.min(0.9999));
+    let x_palla = x_di(k);
     if c.soluzione {
-        let q = c.altezza_interpolata(&c.libera(), k);
-        p.circle_stroke(Pos2::new(x_palla + 34.0, y_di(q)), 10.0, Stroke::new(2.0, VERDE));
-        p.text(Pos2::new(x_palla + 52.0, y_di(q)), Align2::LEFT_CENTER, "caduta libera", FontId::proportional(12.0), VERDE);
+        let libera = c.libera();
+        let verde: Vec<Pos2> = (0..=60).map(|i| Pos2::new(x_di(f64::from(i) / 60.0), y_di(c.altezza_interpolata(&libera, f64::from(i) / 60.0 * 0.9999)))).collect();
+        p.add(Shape::dashed_line(&verde, Stroke::new(1.6, VERDE), 6.0, 5.0));
+        let q = c.altezza_interpolata(&libera, k.min(0.9999));
+        p.circle_stroke(Pos2::new(x_palla, y_di(q)), 12.0, Stroke::new(2.0, VERDE));
     }
     // La palla brilla di verde quando il suo percorso e' quello libero.
     let f = frazione_del_massimo(c).clamp(0.0, 1.0) as f32;
-    let tinta = Color32::from_rgb(
-        (255.0 - 145.0 * f) as u8,
-        (160.0 + 65.0 * f) as u8,
-        (90.0 + 40.0 * f) as u8,
-    );
+    let tinta = Color32::from_rgb((255.0 - 145.0 * f) as u8, (160.0 + 65.0 * f) as u8, (90.0 + 40.0 * f) as u8);
     let centro = Pos2::new(x_palla, y_di(quota));
-    p.circle_filled(centro, 22.0 + 6.0 * f * (tempo as f32 * 4.0).sin().abs(), tinta.gamma_multiply(0.18));
-    p.circle_filled(centro, 12.0, tinta);
-    p.line_segment([Pos2::new(x_palla, suolo_y), Pos2::new(x_palla, centro.y + 14.0)], Stroke::new(1.0, LINEA));
-    // Ombra sul suolo, piu' piccola quanto piu' sale.
-    let ombra = 14.0 - 6.0 * (quota / massimo) as f32;
-    p.add(Shape::ellipse_filled(Pos2::new(x_palla, suolo_y + 6.0), Vec2::new(ombra, 3.5), Color32::from_black_alpha(140)));
+    p.circle_filled(centro, 26.0 + 8.0 * f * (tempo as f32 * 4.0).sin().abs(), tinta.gamma_multiply(0.2));
+    p.circle_filled(centro, 14.0, tinta);
+    p.circle_stroke(centro, 14.0, Stroke::new(1.5, Color32::WHITE.gamma_multiply(0.7)));
+    // Ombra sul suolo.
+    let ombra = 16.0 - 7.0 * (quota / massimo) as f32;
+    p.add(Shape::ellipse_filled(Pos2::new(x_palla, suolo_y + 6.0), Vec2::new(ombra, 4.0), Color32::from_black_alpha(140)));
 
     p.text(r.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "La palla vista da chi sta a terra", FontId::proportional(14.0), CHIARO);
     let nome = GRAVITA.iter().find(|(_, g)| (*g - c.g).abs() < 1e-9).map_or("", |(n, _)| *n);
