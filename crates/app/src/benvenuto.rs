@@ -153,7 +153,7 @@ fn visite_in_evidenza(ui: &mut egui::Ui, s: &mut Stato, larghezza: f32) {
     ui.label(RichText::new("Una visita ti fa provare le cose davvero: ti indica il comando e va avanti quando ci riesci.").color(GRIGIO));
     ui.add_space(8.0);
     let colonne = if larghezza > 900.0 { 3 } else { 1 };
-    let w = (larghezza - SPAZIO * (colonne as f32 - 1.0)) / colonne as f32;
+    let w = ((larghezza - SPAZIO * (colonne as f32 - 1.0)) / colonne as f32).floor() - 8.0;
     let mut scelta = None;
     ui.horizontal_top(|ui| {
         for (i, v) in visite::VISITE.iter().enumerate().take(colonne) {
@@ -173,22 +173,27 @@ fn visite_in_evidenza(ui: &mut egui::Ui, s: &mut Stato, larghezza: f32) {
 }
 
 fn visita_scheda(ui: &mut egui::Ui, v: &visite::Visita, w: f32, scelta: &mut Option<usize>, i: usize) {
-    Frame::new()
-        .fill(SUPERFICIE)
-        .stroke(Stroke::new(1.0, CIANO.gamma_multiply(0.6)))
-        .corner_radius(10)
-        .inner_margin(Margin::same(14))
-        .show(ui, |ui| {
-            ui.set_width(w - 30.0);
-            ui.set_min_height(120.0);
-            ui.label(RichText::new(v.durata.to_uppercase()).small().strong().color(GRIGIO));
-            ui.label(RichText::new(v.nome).size(19.0).strong().color(CIANO));
-            ui.add(egui::Label::new(RichText::new(v.descrizione).color(CHIARO)).wrap());
-            ui.add_space(8.0);
-            if ui.add(egui::Button::new(RichText::new("Comincia").strong()).min_size(Vec2::new(120.0, 32.0))).clicked() {
-                *scelta = Some(i);
-            }
-        });
+    ui.vertical(|ui| {
+        Frame::new()
+            .fill(SUPERFICIE)
+            .stroke(Stroke::new(1.0, CIANO.gamma_multiply(0.6)))
+            .corner_radius(10)
+            .inner_margin(Margin::same(14))
+            .show(ui, |ui| {
+                ui.set_width(w - 30.0);
+                ui.set_min_height(150.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(v.durata.to_uppercase()).small().strong().color(GRIGIO));
+                    ui.label(RichText::new(v.nome).size(19.0).strong().color(CIANO));
+                    ui.add_space(2.0);
+                    ui.add(egui::Label::new(RichText::new(v.descrizione).color(CHIARO)).wrap());
+                    ui.add_space(10.0);
+                    if ui.add(egui::Button::new(RichText::new("Comincia").strong()).min_size(Vec2::new(120.0, 32.0))).clicked() {
+                        *scelta = Some(i);
+                    }
+                });
+            });
+    });
 }
 
 fn consigli(ui: &mut egui::Ui) {

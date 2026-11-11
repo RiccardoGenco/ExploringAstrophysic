@@ -1,7 +1,7 @@
 //! La scena dei gemelli: la nave al centro, le stelle che scorrono, due orologi grandi.
 //! Le distanze sono quelle che vede chi viaggia, quindi accorciate dal fattore γ.
 
-use crate::pannello::{CHIARO, CIANO, FONDO, GIALLO, GRIGIO, VERDE};
+use crate::pannello::{CHIARO, CIANO, FONDO, GIALLO, GRIGIO, LINEA, VERDE};
 use colossi_fisica::relativita::{gamma, stato_a_tempo, tempo_proprio, Evento};
 use egui::{Align2, Color32, FontId, Painter, Pos2, Rect, Shape, Stroke, Vec2};
 use std::f32::consts::TAU;
@@ -69,7 +69,7 @@ fn scheda_eta(p: &Painter, area: Rect, anni: f64, tinta: Color32, nome: &str) {
 
 fn nave(p: &Painter, c: Pos2, verso_destra: bool, fiamma: f32) {
     let d = if verso_destra { 1.0 } else { -1.0 };
-    let punto = |x: f32, y: f32| c + Vec2::new(x * d, y);
+    let punto = |x: f32, y: f32| c + Vec2::new(x * d * 1.5, y * 1.5);
     if fiamma > 0.01 {
         let l = 14.0 + 46.0 * fiamma;
         p.add(Shape::convex_polygon(vec![punto(-24.0, -6.0), punto(-24.0 - l, 0.0), punto(-24.0, 6.0)], GIALLO.gamma_multiply(0.85), Stroke::NONE));
@@ -82,104 +82,100 @@ fn nave(p: &Painter, c: Pos2, verso_destra: bool, fiamma: f32) {
     p.circle_filled(punto(8.0, 0.0), 5.0, CIANO);
 }
 
+fn pianeta(p: &Painter, c: Pos2, r: f32) {
+    p.circle_filled(c, r, Color32::from_rgb(40, 110, 200));
+    p.circle_filled(c + Vec2::new(-r * 0.3, -r * 0.2), r * 0.35, Color32::from_rgb(60, 160, 90));
+    p.circle_filled(c + Vec2::new(r * 0.35, r * 0.3), r * 0.25, Color32::from_rgb(60, 160, 90));
+    p.circle_stroke(c, r, Stroke::new(1.5, CIANO.gamma_multiply(0.6)));
+}
+
+fn stella(p: &Painter, c: Pos2, r: f32, tempo: f64) {
+    let pulsa = 1.0 + 0.08 * (tempo as f32 * 2.0).sin();
+    for k in (1..=4).rev() {
+        p.circle_filled(c, r * (1.0 + 0.45 * k as f32) * pulsa, GIALLO.gamma_multiply(0.07));
+    }
+    p.circle_filled(c, r, GIALLO);
+}
+
+/// Una pista con i tick ogni anno luce. `lunghezza_ly` e' quanto misura la pista per chi guarda.
+#[allow(clippy::too_many_arguments)]
+fn pista(p: &Painter, riquadro: Rect, x0: f32, x1: f32, y: f32, ly: f64, frazione: f64, verso_destra: bool, fiamma: f32, tempo: f64, titolo: &str, nota: &str) {
+    p.text(Pos2::new(riquadro.left() + 30.0, y - 72.0), Align2::LEFT_CENTER, titolo, FontId::proportional(15.0), CHIARO);
+    p.text(Pos2::new(riquadro.right() - 30.0, y - 72.0), Align2::RIGHT_CENTER, nota, FontId::proportional(15.0), CIANO);
+    p.line_segment([Pos2::new(x0, y), Pos2::new(x1, y)], Stroke::new(2.0, LINEA));
+    let passi = ly.floor() as i32;
+    for k in 0..=passi {
+        let q = x0 + (x1 - x0) * (f64::from(k) / ly) as f32;
+        p.line_segment([Pos2::new(q, y - 5.0), Pos2::new(q, y + 5.0)], Stroke::new(1.0, GRIGIO));
+    }
+    pianeta(p, Pos2::new(x0 - 30.0, y), 28.0);
+    stella(p, Pos2::new(x1 + 30.0, y), 21.0, tempo);
+    let nave_x = x0 + (x1 - x0) * frazione as f32;
+    nave(p, Pos2::new(nave_x, y - 2.0), verso_destra, fiamma);
+}
+
 /// Disegna la scena. `avanzamento` va da 0 a 1 lungo il viaggio.
 pub fn disegna(p: &Painter, area: Rect, linea: &[Evento], avanzamento: f64, tempo_reale: f64) {
     p.rect_filled(area, 0.0, FONDO);
+    for i in 0..110u32 {
+        let x = area.left() + caso(i, 1) * area.width();
+        let y = area.top() + caso(i, 2) * area.height();
+        let lampeggia = 0.55 + 0.45 * ((tempo_reale as f32) * (0.6 + caso(i, 4)) + caso(i, 5) * 6.0).sin();
+        p.circle_filled(Pos2::new(x, y), 0.6 + caso(i, 3) * 1.0, Color32::from_white_alpha((70.0 + 90.0 * lampeggia) as u8));
+    }
     let durata = linea.last().map_or(1.0, |e| e.t);
     let t = avanzamento * durata;
     let (x_nave, tau_viaggio) = stato_a_tempo(linea, t);
     let beta = velocita(linea, t);
-    let g = gamma(beta);
     let a_riposo = avanzamento >= 1.0;
-    let beta_vis = if a_riposo { 0.0 } else { beta };
+    let g = if a_riposo { 1.0 } else { gamma(beta) };
+    let x_max = linea.iter().map(|e| e.x).fold(0.1, f64::max);
+    let frazione = (x_nave / x_max).clamp(0.0, 1.0);
+    let destra = beta >= 0.0;
+    let fiamma = if a_riposo { 0.0 } else { (beta.abs() as f32).clamp(0.0, 1.0) };
 
-    let x_max = linea.iter().map(|e| e.x).fold(0.0, f64::max);
-    let x_min = linea.iter().map(|e| e.x).fold(0.0, f64::min);
-    // Distanza visibile: ci stanno 8 anni luce, come li misura chi viaggia.
-    let px = area.width() / 8.0;
-    let centro = Pos2::new(area.center().x, area.center().y + 20.0);
-    let schermo = |x: f64| centro.x + ((x - x_nave) / g) as f32 * px;
+    let margine = 110.0;
+    let (x0, x1) = (area.left() + margine, area.right() - margine);
+    let lung = x1 - x0;
 
-    // Stelle di fondo: ferme nel mondo di chi resta, accorciate per chi viaggia.
-    let verso = if beta_vis >= 0.0 { 1.0 } else { -1.0 };
-    for i in 0..140u32 {
-        let x = f64::from(x_min) - 8.0 + f64::from(caso(i, 1)) * (f64::from(x_max - x_min) + 16.0);
-        let y = area.top() + caso(i, 2) * area.height();
-        let sx = schermo(x);
-        let luce = 0.35 + 0.65 * caso(i, 3);
-        let scia = beta_vis.abs() as f32 * g as f32 * 9.0 * px * 0.05;
-        if sx > area.left() - 80.0 && sx < area.right() + 80.0 {
-            let colore = Color32::from_white_alpha((120.0 + 120.0 * luce) as u8);
-            if scia > 1.5 {
-                p.line_segment([Pos2::new(sx, y), Pos2::new(sx + verso * scia, y)], Stroke::new(1.0 + luce, colore));
-            } else {
-                p.circle_filled(Pos2::new(sx, y), 0.8 + 1.2 * luce, colore);
-            }
-        }
-    }
+    // Visto da Terra: la pista ha la lunghezza vera.
+    let y1 = area.top() + area.height() * 0.27;
+    pista(p, area, x0, x1, y1, x_max, frazione, destra, fiamma, tempo_reale, "VISTO DA TERRA", &format!("{} anni luce", numero(x_max)));
 
-    // Terra e destinazione.
-    let terra = Pos2::new(schermo(0.0), centro.y);
-    let meta = Pos2::new(schermo(x_max), centro.y);
-    if terra.x > area.left() - 120.0 && terra.x < area.right() + 120.0 {
-        p.circle_filled(terra, 34.0, Color32::from_rgb(40, 110, 200));
-        p.circle_filled(terra + Vec2::new(-10.0, -6.0), 12.0, Color32::from_rgb(60, 160, 90));
-        p.circle_filled(terra + Vec2::new(12.0, 10.0), 8.0, Color32::from_rgb(60, 160, 90));
-        p.circle_stroke(terra, 34.0, Stroke::new(1.5, CIANO.gamma_multiply(0.6)));
-        p.text(terra + Vec2::new(0.0, 52.0), Align2::CENTER_CENTER, "Terra", FontId::proportional(14.0), CIANO);
-    }
-    if x_max > 0.1 && meta.x > area.left() - 120.0 && meta.x < area.right() + 120.0 {
-        let alone = 46.0 + 4.0 * (tempo_reale as f32 * 2.0).sin();
-        p.circle_filled(meta, alone, GIALLO.gamma_multiply(0.15));
-        p.circle_filled(meta, 26.0, GIALLO);
-        p.text(meta + Vec2::new(0.0, 56.0), Align2::CENTER_CENTER, format!("meta, a {} anni luce", numero(x_max)), FontId::proportional(14.0), GIALLO);
-    }
+    // Visto dalla nave: la stessa pista, accorciata di γ attorno al centro.
+    let y2 = area.top() + area.height() * 0.58;
+    let corta = lung / g as f32;
+    let c = (x0 + x1) * 0.5;
+    let (s0, s1) = (c - corta * 0.5, c + corta * 0.5);
+    p.line_segment([Pos2::new(x0 - 30.0, y1 + 30.0), Pos2::new(s0 - 30.0, y2 - 30.0)], Stroke::new(1.0, GRIGIO.gamma_multiply(0.35)));
+    p.line_segment([Pos2::new(x1 + 30.0, y1 + 30.0), Pos2::new(s1 + 30.0, y2 - 30.0)], Stroke::new(1.0, GRIGIO.gamma_multiply(0.35)));
+    let nota = if a_riposo || beta.abs() < 1e-6 { "ferma: nessun accorciamento".to_string() } else { format!("{} anni luce: più corta di {} volte", numero(x_max / g), numero(g)) };
+    pista(p, area, s0, s1, y2, x_max, frazione, destra, 0.0, tempo_reale, "VISTO DALLA NAVE", &nota);
 
-    // Una riga di anni luce dalla Terra, che mostra la contrazione.
-    let y_riga = centro.y + 96.0;
-    for k in 0..=(x_max.floor() as i32) {
-        let q = schermo(f64::from(k));
-        if q > area.left() && q < area.right() {
-            p.line_segment([Pos2::new(q, y_riga - 6.0), Pos2::new(q, y_riga + 6.0)], Stroke::new(1.0, GRIGIO));
-            p.text(Pos2::new(q, y_riga + 16.0), Align2::CENTER_CENTER, k.to_string(), FontId::monospace(11.0), GRIGIO);
-        }
-    }
-    p.text(Pos2::new(area.center().x, y_riga + 34.0), Align2::CENTER_CENTER, "anni luce dalla Terra, misurati da chi viaggia", FontId::proportional(12.0), GRIGIO);
-
-    // La nave resta al centro.
-    let fiamma = if a_riposo { 0.0 } else { (beta_vis.abs() as f32).clamp(0.0, 1.0) };
-    nave(p, centro, beta_vis >= 0.0, fiamma);
-
-    // Dati in alto.
-    let testo = if a_riposo {
+    // Cosa succede.
+    let frase = if a_riposo {
         "Viaggio finito. Confronta le due età.".to_string()
-    } else if beta_vis.abs() < 1e-6 {
-        "Nave ferma".to_string()
+    } else if beta.abs() < 1e-6 {
+        "La nave è ferma.".to_string()
     } else {
-        format!(
-            "Velocità {} c.  Per chi viaggia lo spazio è {} volte più corto e il tempo scorre {} volte più piano.",
-            numero(beta_vis.abs()).replace(',', ",") + "",
-            numero(g),
-            numero(g)
-        )
+        format!("La nave va a {} c: per chi viaggia il tempo scorre {} volte più lentamente.", numero(beta.abs()), numero(g))
     };
-    p.text(Pos2::new(area.center().x, area.top() + 22.0), Align2::CENTER_CENTER, testo, FontId::proportional(15.0), CHIARO);
+    p.text(Pos2::new(area.center().x, area.top() + 24.0), Align2::CENTER_CENTER, frase, FontId::proportional(17.0), CHIARO);
 
-    // Orologi grandi.
-    let tau_casa = t;
-    let largo = (area.width() * 0.5 - 24.0).min(300.0);
+    // Età.
+    let largo = (area.width() * 0.5 - 24.0).min(320.0);
     let basso = area.bottom() - 16.0;
-    let s1 = Rect::from_min_size(Pos2::new(area.left() + 16.0, basso - 70.0), Vec2::new(largo, 70.0));
-    let s2 = Rect::from_min_size(Pos2::new(area.right() - 16.0 - largo, basso - 70.0), Vec2::new(largo, 70.0));
-    scheda_eta(p, s1, tau_casa, CIANO, "Chi resta");
-    scheda_eta(p, s2, tau_viaggio, ROSA, "Chi viaggia");
+    let s1r = Rect::from_min_size(Pos2::new(area.left() + 16.0, basso - 70.0), Vec2::new(largo, 70.0));
+    let s2r = Rect::from_min_size(Pos2::new(area.right() - 16.0 - largo, basso - 70.0), Vec2::new(largo, 70.0));
+    scheda_eta(p, s1r, t, CIANO, "Chi resta");
+    scheda_eta(p, s2r, tau_viaggio, ROSA, "Chi viaggia");
     if a_riposo {
-        let differenza = tempo_proprio(&[Evento { t: 0.0, x: 0.0 }, Evento { t: durata, x: 0.0 }]) - tempo_proprio(linea);
+        let differenza = durata - tempo_proprio(linea);
         p.text(
-            Pos2::new(area.center().x, basso - 35.0),
+            Pos2::new(area.center().x, basso - 100.0),
             Align2::CENTER_CENTER,
             format!("Chi viaggia è più giovane di {} anni", numero(differenza)),
-            FontId::proportional(20.0),
+            FontId::proportional(22.0),
             VERDE,
         );
     }

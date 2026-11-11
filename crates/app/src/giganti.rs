@@ -192,7 +192,7 @@ fn grafico(ui: &mut egui::Ui, area: Rect, g: &mut Giganti) {
     crate::visite::segna_rect(ui.ctx(), "seme", Rect::from_center_size(seme, Vec2::splat(36.0)));
     p.circle_filled(seme, 8.0, ARANCIO);
     p.circle_stroke(seme, 12.0, Stroke::new(1.2, CHIARO));
-    p.text(seme + Vec2::new(14.0, 8.0), Align2::LEFT_TOP, "seme: trascinami", FontId::proportional(11.5), CHIARO);
+    p.text(seme + Vec2::new(14.0, 8.0), Align2::LEFT_TOP, "buco nero iniziale: trascinalo", FontId::proportional(11.5), CHIARO);
 
     let x = a_schermo(piano, g.t_cursore, LOG_MIN).x;
     p.line_segment([Pos2::new(x, piano.top()), Pos2::new(x, piano.bottom())], Stroke::new(1.0, CIANO.gamma_multiply(0.7)));
@@ -204,14 +204,14 @@ fn grafico(ui: &mut egui::Ui, area: Rect, g: &mut Giganti) {
     p.text(
         area.left_top() + Vec2::new(14.0, 12.0),
         Align2::LEFT_TOP,
-        "Trascina il seme nel tempo e nella massa, clicca altrove per guardare un altro istante. Il ritmo si cambia a destra.",
+        "Trascina il punto arancione: scegli quando nasce il buco nero e quanto pesa. Clicca altrove per guardare un altro momento.",
         FontId::proportional(13.0),
         GRIGIO,
     );
     p.text(
         area.left_top() + Vec2::new(14.0, 32.0),
         Align2::LEFT_TOP,
-        "I punti sono buchi neri misurati, già enormi quando l'universo era giovane. Il seme deve arrivarci in tempo.",
+        "I punti sono buchi neri misurati, già enormi quando l'universo era giovane. Il buco nero deve crescere abbastanza in fretta per arrivarci in tempo.",
         FontId::proportional(13.0),
         CIANO,
     );
@@ -303,14 +303,14 @@ fn strumenti(ui: &mut egui::Ui, g: &mut Giganti) -> Option<f64> {
         }
     });
     ui.label(RichText::new(format!(
-        "Seme di {} soli, a {:.0} milioni di anni.",
+        "Parte con {} soli di massa, a {:.0} milioni di anni dal Big Bang.",
         grande(g.massa_seme),
         g.t_seme
     )).color(GRIGIO));
 
     titoletto(ui, "BUCHI NERI MISURATI");
     egui::Grid::new("quasar").num_columns(4).spacing([10.0, 3.0]).striped(true).show(ui, |ui| {
-        for t in ["", "Massa", "Ci arrivi?", "Seme minimo"] {
+        for t in ["", "Massa", "Ci arrivi?", "Massa di partenza minima"] {
             ui.label(RichText::new(t).small().color(GRIGIO));
         }
         ui.end_row();

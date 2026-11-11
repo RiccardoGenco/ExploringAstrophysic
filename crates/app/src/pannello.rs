@@ -525,6 +525,8 @@ mod prove {
         eventi: Vec<Event>,
         modificatori: Modifiers,
         tempo: f64,
+        texture: std::collections::HashMap<egui::TextureId, (usize, usize, Vec<egui::Color32>)>,
+        ultimo: Vec<egui::epaint::ClippedShape>,
     }
 
     impl Simulatore {
@@ -535,6 +537,8 @@ mod prove {
                 eventi: Vec::new(),
                 modificatori: Modifiers::NONE,
                 tempo: 0.0,
+                texture: Default::default(),
+                ultimo: Vec::new(),
             };
             s.stato.stanza = Stanza::BucoNero;
             s.stato.guida_visibile = false;
@@ -556,9 +560,77 @@ mod prove {
                 ..Default::default()
             };
             let stato = &mut self.stato;
-            let _ = self.contesto.run_ui(ingresso, |ui| {
+            let uscita = self.contesto.run_ui(ingresso, |ui| {
                 mostra(ui, stato, 60.0);
             });
+            for (id, delta) in &uscita.textures_delta.set {
+                let egui::ImageData::Color(img) = &delta.image;
+                let voce = self.texture.entry(*id).or_insert((img.size[0], img.size[1], vec![egui::Color32::TRANSPARENT; img.size[0] * img.size[1]]));
+                match delta.pos {
+                    None => *voce = (img.size[0], img.size[1], img.pixels.clone()),
+                    Some([x0, y0]) => {
+                        for y in 0..img.size[1] {
+                            for x in 0..img.size[0] {
+                                voce.2[(y0 + y) * voce.0 + x0 + x] = img.pixels[y * img.size[0] + x];
+                            }
+                        }
+                    }
+                }
+            }
+            self.ultimo = uscita.shapes;
+        }
+
+        /// Disegna l'ultimo fotogramma con un rasterizzatore minimo e lo scrive in PPM.
+        fn scatta(&self, percorso: &str) {
+            let (w, h) = (1536usize, 840usize);
+            let mut px = vec![[9.0f32, 11.0, 17.0]; w * h];
+            let primitive = self.contesto.tessellate(self.ultimo.clone(), 1.0);
+            for prim in primitive {
+                let egui::epaint::Primitive::Mesh(mesh) = prim.primitive else { continue };
+                let Some(tex) = self.texture.get(&mesh.texture_id) else { continue };
+                let clip = prim.clip_rect;
+                for tri in mesh.indices.chunks(3) {
+                    let v = [mesh.vertices[tri[0] as usize], mesh.vertices[tri[1] as usize], mesh.vertices[tri[2] as usize]];
+                    let area = (v[1].pos.x - v[0].pos.x) * (v[2].pos.y - v[0].pos.y) - (v[2].pos.x - v[0].pos.x) * (v[1].pos.y - v[0].pos.y);
+                    if area.abs() < 1e-6 {
+                        continue;
+                    }
+                    let min_x = v.iter().map(|q| q.pos.x).fold(f32::MAX, f32::min).max(clip.left()).max(0.0).floor() as usize;
+                    let max_x = v.iter().map(|q| q.pos.x).fold(f32::MIN, f32::max).min(clip.right()).min(w as f32 - 1.0).ceil() as usize;
+                    let min_y = v.iter().map(|q| q.pos.y).fold(f32::MAX, f32::min).max(clip.top()).max(0.0).floor() as usize;
+                    let max_y = v.iter().map(|q| q.pos.y).fold(f32::MIN, f32::max).min(clip.bottom()).min(h as f32 - 1.0).ceil() as usize;
+                    for y in min_y..=max_y {
+                        for x in min_x..=max_x {
+                            let (cx, cy) = (x as f32 + 0.5, y as f32 + 0.5);
+                            let b0 = ((v[1].pos.x - cx) * (v[2].pos.y - cy) - (v[2].pos.x - cx) * (v[1].pos.y - cy)) / area;
+                            let b1 = ((v[2].pos.x - cx) * (v[0].pos.y - cy) - (v[0].pos.x - cx) * (v[2].pos.y - cy)) / area;
+                            let b2 = 1.0 - b0 - b1;
+                            if b0 < -0.001 || b1 < -0.001 || b2 < -0.001 {
+                                continue;
+                            }
+                            let u = b0 * v[0].uv.x + b1 * v[1].uv.x + b2 * v[2].uv.x;
+                            let vv = b0 * v[0].uv.y + b1 * v[1].uv.y + b2 * v[2].uv.y;
+                            let tx = ((u * tex.0 as f32) as usize).min(tex.0 - 1);
+                            let ty = ((vv * tex.1 as f32) as usize).min(tex.1 - 1);
+                            let t = tex.2[ty * tex.0 + tx];
+                            let mut c = [0.0f32; 4];
+                            for k in 0..4 {
+                                let vert = b0 * v[0].color.to_array()[k] as f32 + b1 * v[1].color.to_array()[k] as f32 + b2 * v[2].color.to_array()[k] as f32;
+                                c[k] = vert / 255.0 * t.to_array()[k] as f32 / 255.0;
+                            }
+                            let dst = &mut px[y * w + x];
+                            for k in 0..3 {
+                                dst[k] = c[k] * 255.0 + dst[k] * (1.0 - c[3]);
+                            }
+                        }
+                    }
+                }
+            }
+            let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
+            for p in px {
+                out.extend(p.iter().map(|c| c.clamp(0.0, 255.0) as u8));
+            }
+            std::fs::write(percorso, out).unwrap();
         }
 
         fn muovi(&mut self, x: f32, y: f32) {
@@ -902,5 +974,19 @@ mod prove {
         s.bottone(300.0, 300.0, PointerButton::Primary, false);
         s.giro();
         assert_ne!(s.stato.curva.partenza, partenza);
+    }
+
+    #[test]
+    fn anteprime_su_file() {
+        let Ok(cartella) = std::env::var("ANTEPRIMA") else { return };
+        let stanze = [("gemelli", Stanza::Gemelli), ("cadere", Stanza::Cadere), ("curva", Stanza::Curva), ("osservatorio", Stanza::Osservatorio), ("benvenuto", Stanza::Benvenuto), ("neutroni", Stanza::Neutroni), ("giganti", Stanza::Giganti), ("galassie", Stanza::Galassie), ("onde", Stanza::Onde), ("fondo", Stanza::Fondo), ("scala", Stanza::Scala), ("trecorpi", Stanza::TreCorpi)];
+        for (nome, stanza) in stanze {
+            let mut s = Simulatore::nuovo();
+            s.stato.stanza = stanza;
+            for _ in 0..90 {
+                s.giro();
+            }
+            s.scatta(&format!("{cartella}/{nome}.ppm"));
+        }
     }
 }

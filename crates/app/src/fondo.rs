@@ -521,7 +521,7 @@ fn cielo(ui: &mut egui::Ui, area: Rect, b: &mut BancoFondo) {
         p.rect_filled(Rect::from_min_max(area.left_bottom() - Vec2::new(0.0, 30.0), area.right_bottom()), 0.0, velo);
     }
     let f = FontId::proportional(13.0);
-    p.text(area.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "Togli uno strato alla volta: il nostro moto, poi la Via Lattea. Sotto restano i semi delle galassie.", f.clone(), GRIGIO);
+    p.text(area.left_top() + Vec2::new(14.0, 12.0), Align2::LEFT_TOP, "Togli uno strato alla volta: il nostro moto, poi la Via Lattea. Sotto restano da cui nasceranno le galassie.", f.clone(), GRIGIO);
     let tutti_spenti = !b.con_dipolo && !b.con_galassia && !b.con_macchie;
     let frase = if tutti_spenti {
         format!("Il cielo a occhio chiuso sui dettagli: {} K in ogni direzione.", decimale(T_OGGI))
@@ -704,7 +704,7 @@ fn col_cielo(ui: &mut egui::Ui, b: &mut BancoFondo) {
     ui.checkbox(&mut b.con_dipolo, "Il nostro moto (più caldo davanti)");
     ui.checkbox(&mut b.reale, "Mappa reale (WMAP)");
     ui.add_enabled(!b.reale, egui::Checkbox::new(&mut b.con_galassia, "La Via Lattea, solo nel cielo simulato"));
-    ui.checkbox(&mut b.con_macchie, "Le macchie: i semi delle galassie");
+    ui.checkbox(&mut b.con_macchie, "Le macchie: da qui nasceranno le galassie");
     titoletto(ui, "VISTA");
     ui.horizontal(|ui| {
         ui.selectable_value(&mut b.dall_interno, false, "Tutto il cielo");

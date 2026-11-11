@@ -64,7 +64,7 @@ const GIGANTI: Guida = Guida {
     cosa: "La crescita di un buco nero nel tempo dell'universo. I punti sono buchi neri veri, già enormi quando l'universo era giovane.",
     perche: "Nessuno sa ancora bene come abbiano fatto a diventare così grandi così in fretta.",
     sfide: &[
-        s("Trascina il seme finché raggiunge il quasar più lontano", |s| s.giganti.arriva_al_piu_lontano()),
+        s("Trascina il punto arancione finché la curva raggiunge il quasar più lontano", |s| s.giganti.arriva_al_piu_lontano()),
         s("Spingi la crescita oltre il limite di Eddington", |s| s.giganti.oltre_eddington()),
     ],
 };
@@ -101,7 +101,7 @@ const ONDE: Guida = Guida {
 
 const FONDO: Guida = Guida {
     cosa: "La luce più antica che esista: com'era l'universo giovane, e come appare oggi il cielo in microonde.",
-    perche: "È una fotografia dell'universo bambino, e contiene i semi di tutte le galassie.",
+    perche: "È una fotografia dell'universo bambino, e contiene già i grumi da cui nasceranno le galassie.",
     sfide: &[
         s("Scorri finché la nebbia si dirada", |s| s.fondo.pagina == PaginaFondo::Nebbia && s.fondo.z < 1000.0),
         s("Apri il cielo e togli il nostro moto", |s| s.fondo.pagina == PaginaFondo::Cielo && !s.fondo.con_dipolo),

@@ -144,9 +144,9 @@ const COLOSSI: &[Tappa] = &[
     Tappa {
         titolo: "Giganti nati troppo presto",
         storia: "Questi buchi neri erano già enormi quando l'universo era giovane. Come hanno fatto a crescere in tempo? Non lo sappiamo ancora del tutto.",
-        compito: "Trascina il seme, il cerchio arancione, finché la curva raggiunge il quasar più lontano.",
-        esito: "Ci sei arrivato. Serve un seme già pesante o una crescita velocissima, e gli astronomi discutono ancora quale.",
-        indizio: indizio("seme", "Trascina il seme"),
+        compito: "Trascina il punto arancione finché la curva tocca il quasar più lontano.",
+        esito: "Ci sei arrivato. Serve un buco nero di partenza già pesante o una crescita velocissima, e gli astronomi discutono ancora quale.",
+        indizio: indizio("seme", "Trascina questo punto"),
         prepara: |s| {
             s.stanza = Stanza::Giganti;
             s.giganti = Default::default();
