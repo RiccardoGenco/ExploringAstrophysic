@@ -127,6 +127,48 @@ fn tinta(o: &Oggetto) -> Color32 {
     }
 }
 
+/// Un corpo pieno con un po' di carattere: colore, ombreggiatura e qualche dettaglio.
+fn disegna_corpo(p: &egui::Painter, c: Pos2, r: f32, nome: &str, k: f32) {
+    let (base, alone): (Color32, bool) = if nome.contains("Terra") {
+        (Color32::from_rgb(50, 110, 205), false)
+    } else if nome.contains("Luna") {
+        (Color32::from_rgb(175, 175, 180), false)
+    } else if nome.contains("Giove") {
+        (Color32::from_rgb(215, 165, 115), false)
+    } else if nome == "Sole" {
+        (Color32::from_rgb(255, 205, 80), true)
+    } else if nome.contains("Betelgeuse") {
+        (Color32::from_rgb(255, 105, 75), true)
+    } else if nome.contains("neutroni") {
+        (Color32::from_rgb(150, 200, 255), true)
+    } else if nome.contains("balena") {
+        (Color32::from_rgb(105, 155, 195), false)
+    } else {
+        (Color32::from_rgb(255, 196, 140), false)
+    };
+    if alone {
+        for i in (1..=5).rev() {
+            p.circle_filled(c, r * (1.0 + 0.12 * i as f32), base.gamma_multiply(0.05 * k));
+        }
+    }
+    p.circle_filled(c, r, base.gamma_multiply(0.55 * k));
+    // Luce da in alto a sinistra e ombra dal lato opposto: sembra una sfera.
+    p.circle_filled(c + Vec2::new(-0.25, -0.25) * r, r * 0.62, Color32::WHITE.gamma_multiply(0.10 * k));
+    p.circle_filled(c + Vec2::new(0.3, 0.3) * r, r * 0.55, Color32::BLACK.gamma_multiply(0.18 * k));
+    if nome.contains("Terra") {
+        for (dx, dy, rr) in [(-0.3, -0.1, 0.28), (0.25, 0.2, 0.2), (0.0, -0.45, 0.14)] {
+            p.circle_filled(c + Vec2::new(dx, dy) * r, r * rr, Color32::from_rgb(70, 160, 90).gamma_multiply(0.8 * k));
+        }
+    }
+    if nome.contains("Giove") {
+        for dy in [-0.4_f32, -0.1, 0.2, 0.5] {
+            let mezza = (1.0 - dy * dy).max(0.0).sqrt() * r;
+            p.line_segment([c + Vec2::new(-mezza, dy * r), c + Vec2::new(mezza, dy * r)], Stroke::new((r * 0.06).max(1.0), Color32::from_rgb(170, 110, 70).gamma_multiply(0.7 * k)));
+        }
+    }
+    p.circle_stroke(c, r, Stroke::new(1.5, base.gamma_multiply(k)));
+}
+
 fn cerchio_a_tratti(p: &egui::Painter, c: Pos2, r: f32, tinta: Color32) {
     let n = ((r * 0.5) as usize).clamp(60, 480);
     let punti: Vec<Pos2> = (0..=n)
@@ -178,10 +220,7 @@ fn vista(ui: &mut egui::Ui, area: Rect, s: &mut Scala, indice_click: &mut Option
         let raggio = (ogg.raggio * px_per_m) as f32;
         let c = tinta(ogg);
         match ogg.tipo {
-            Tipo::Pieno => {
-                p.circle_filled(centro, raggio, c.gamma_multiply(0.14 * k));
-                p.circle_stroke(centro, raggio, Stroke::new(1.5, c.gamma_multiply(k)));
-            }
+            Tipo::Pieno => disegna_corpo(&p, centro, raggio, ogg.nome, k),
             Tipo::Orbita => cerchio_a_tratti(&p, centro, raggio, c.gamma_multiply(0.85 * k)),
             Tipo::BucoNero => {
                 p.circle_filled(centro, raggio, Color32::BLACK.gamma_multiply(k));

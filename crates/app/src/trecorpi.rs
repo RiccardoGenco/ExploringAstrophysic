@@ -1003,6 +1003,8 @@ fn strumenti(ui: &mut egui::Ui, c: &mut TreCorpi) {
         grafico(ui, "distanza dal gemello, 10 alla", &c.divergenza, ROSSO, None);
     }
 
+    ui.add_space(8.0);
+    egui::CollapsingHeader::new(RichText::new("Avanzate").strong()).default_open(false).show(ui, |ui| {
     titoletto(ui, "PRECISIONE DEL CALCOLO");
     let prima = c.log_tolleranza;
     ui.add(egui::Slider::new(&mut c.log_tolleranza, -13.0..=-3.0).text("errore per passo, 10 alla").fixed_decimals(0));
@@ -1048,6 +1050,7 @@ fn strumenti(ui: &mut egui::Ui, c: &mut TreCorpi) {
         }
     });
     grafico(ui, "errore sull'energia, 10 alla", &c.errore, GIALLO, None);
+    });
 
     if let Some(p) = c.pianeta() {
         titoletto(ui, "IL PIANETA");

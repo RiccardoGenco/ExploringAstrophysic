@@ -986,6 +986,7 @@ mod prove {
             match nome {
                 "cadere" => s.stato.cadere.avanzamento = 0.5,
                 "gemelli" => s.stato.gemelli.avanzamento = 0.5,
+                "scala" => s.stato.scala.log_vista = 7.2,
                 "curva" => { s.stato.curva.lascia([0.55, 0.2]); for _ in 0..60 { s.stato.curva.avanza(0.05); } }
                 "onde" => { for _ in 0..4 { s.stato.onde.avanza(2.0); } }
                 _ => {}
