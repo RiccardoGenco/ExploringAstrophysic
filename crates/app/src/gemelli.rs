@@ -27,6 +27,10 @@ pub struct Gemelli {
     pub ritmo: f64,
     pub beta_vista: f64,
     pub segnali: bool,
+    /// Scena con la nave (vero) o diagramma spazio-tempo (falso).
+    pub scena: bool,
+    /// Indice dell'ultimo viaggio pronto scelto.
+    pub viaggio: usize,
     trascinato: Option<usize>,
     vista_ferma: Option<Vista>,
 }
@@ -40,6 +44,8 @@ impl Default for Gemelli {
             ritmo: 1.5,
             beta_vista: 0.0,
             segnali: false,
+            scena: true,
+            viaggio: 0,
             trascinato: None,
             vista_ferma: None,
         };
@@ -50,6 +56,7 @@ impl Default for Gemelli {
 
 impl Gemelli {
     pub fn carica(&mut self, i: usize) {
+        self.viaggio = i;
         self.linea = VIAGGI[i].1.iter().map(|&(t, x)| Evento { t, x }).collect();
         self.avanzamento = 0.0;
         self.in_corso = true;
@@ -156,7 +163,14 @@ pub fn mostra(ui: &mut egui::Ui, g: &mut Gemelli) {
         });
     egui::CentralPanel::default().frame(Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
-        diagramma(ui, area, g);
+        if g.scena {
+            let p = ui.painter_at(area);
+            let adesso = ui.input(|i| i.time);
+            crate::scena_gemelli::disegna(&p, area, &g.linea, g.avanzamento, adesso);
+            ui.ctx().request_repaint();
+        } else {
+            diagramma(ui, area, g);
+        }
     });
 }
 
@@ -166,11 +180,46 @@ fn strumenti(ui: &mut egui::Ui, g: &mut Gemelli) {
     let totale_casa = casa[1].t;
     let totale_viaggio = tempo_proprio(&linea);
 
+    // Prima di tutto: scegli un viaggio, con bottoni grandi.
+    titoletto(ui, "SCEGLI UN VIAGGIO");
+    let mut carica = None;
+    for (i, (nome, _)) in VIAGGI.iter().enumerate() {
+        let scelto = g.viaggio == i;
+        let r = ui.add_sized([ui.available_width(), 34.0], egui::Button::new(RichText::new(*nome).size(15.0)).selected(scelto));
+        if i == 1 {
+            crate::visite::segna(ui, "alpha", &r);
+        }
+        if r.clicked() {
+            carica = Some(i);
+        }
+    }
+    if let Some(i) = carica {
+        g.carica(i);
+    }
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.selectable_value(&mut g.scena, true, "Vista nave");
+        ui.selectable_value(&mut g.scena, false, "Diagramma spazio-tempo");
+    });
+
     // Orologi sulla stessa fetta di "adesso" di chi guarda.
     let (vista_casa, vista_linea) = (g.visti(&casa), g.visti(&linea));
     let adesso = g.avanzamento * vista_casa[1].t;
     let (_, tau_casa) = stato_a_tempo(&vista_casa, adesso);
     let (_, tau_viaggio) = stato_a_tempo(&vista_linea, adesso);
+
+    if g.scena {
+        ui.separator();
+        titoletto(ui, "A FINE VIAGGIO");
+        egui::Grid::new("esiti").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+            riga(ui, "Chi resta invecchia", format!("{} anni", numero(totale_casa)));
+            riga(ui, "Chi viaggia invecchia", format!("{} anni", numero(totale_viaggio)));
+            riga(ui, "Differenza", format!("{} anni", numero(totale_casa - totale_viaggio)));
+        });
+        ui.add_space(8.0);
+        ui.label(RichText::new("Per vedere il viaggio disegnato nello spazio-tempo e cambiare il percorso, passa al diagramma.").color(GRIGIO));
+        return;
+    }
 
     let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 138.0), Sense::hover());
     let p = ui.painter_at(area);
@@ -226,19 +275,6 @@ fn strumenti(ui: &mut egui::Ui, g: &mut Gemelli) {
             totale_viaggio.floor(),
             totale_casa.floor()
         ));
-    }
-
-    titoletto(ui, "VIAGGI PRONTI");
-    let mut carica = None;
-    ui.horizontal_wrapped(|ui| {
-        for (i, (nome, _)) in VIAGGI.iter().enumerate() {
-            if ui.small_button(*nome).clicked() {
-                carica = Some(i);
-            }
-        }
-    });
-    if let Some(i) = carica {
-        g.carica(i);
     }
 }
 

@@ -202,13 +202,28 @@ const COLOSSI: &[Tappa] = &[
 
 const TEMPO: &[Tappa] = &[
     Tappa {
+        titolo: "Un viaggio quasi alla velocità della luce",
+        storia: "Un gemello parte per Alpha Centauri, l'altro resta. Dalla nave le stelle si avvicinano: lo spazio si accorcia.",
+        compito: "Premi «Alpha Centauri a 0,99 c» e guarda il viaggio fino in fondo.",
+        esito: "Chi viaggia è tornato più giovane: ha vissuto meno tempo di chi è rimasto.",
+        indizio: indizio("alpha", "Premi qui"),
+        prepara: |s| {
+            s.stanza = Stanza::Gemelli;
+            s.gemelli.scena = true;
+            s.gemelli.carica(0);
+        },
+        fatto: |s| s.gemelli.viaggio == 1 && s.gemelli.avanzamento >= 1.0,
+        avanzamento: Some(|s| if s.gemelli.viaggio == 1 { s.gemelli.avanzamento as f32 } else { 0.0 }),
+    },
+    Tappa {
         titolo: "Due gemelli",
-        storia: "Quello che viaggia torna più giovane: 6 anni contro 10.",
+        storia: "Nel diagramma il tempo sale e lo spazio va di lato. Quello che viaggia torna più giovane: 6 anni contro 10.",
         compito: "Trascina il punto rosa verso destra e allunga il viaggio.",
         esito: "Più corre, meno tempo vive.",
         indizio: indizio("vertice", "Trascina il punto"),
         prepara: |s| {
             s.stanza = Stanza::Gemelli;
+            s.gemelli.scena = false;
             s.gemelli.carica(0);
         },
         fatto: |s| guida::sfida_ora(s, Stanza::Gemelli, 0),
@@ -222,6 +237,7 @@ const TEMPO: &[Tappa] = &[
         indizio: indizio("chi_guarda", "Sposta qui"),
         prepara: |s| {
             s.stanza = Stanza::Gemelli;
+            s.gemelli.scena = false;
             s.gemelli.beta_vista = 0.0;
             s.gemelli.segnali = false;
         },
@@ -380,7 +396,7 @@ pub const VISITE: [Visita; 3] = [
     },
     Visita {
         nome: "Che cos'è il tempo",
-        durata: "6 tappe",
+        durata: "7 tappe",
         descrizione: "Due gemelli che invecchiano in modo diverso, perché le cose cadono e cosa succede vicino a un buco nero.",
         tappe: TEMPO,
     },
@@ -778,7 +794,7 @@ mod test {
 
     /// Tutti i nomi che i banchi segnalano: un refuso in una tappa si nota qui.
     const NOTI: &[&str] = &[
-        "viaggia", "telescopio", "banco", "newton", "aggiungi", "seme", "alone", "ascolta", "scorri", "vertice", "chi_guarda", "scena",
+        "viaggia", "alpha", "telescopio", "banco", "newton", "aggiungi", "seme", "alone", "ascolta", "scorri", "vertice", "chi_guarda", "scena",
         "natura", "di_ciascuno", "cursori", "calcola_missione", "materia", "gemello", "mappa", "curvatura",
     ];
 

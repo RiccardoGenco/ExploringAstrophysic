@@ -22,6 +22,7 @@ mod orizzonte;
 mod osservatorio;
 mod pannello;
 mod scala;
+mod scena_gemelli;
 mod sfondo;
 mod stato;
 mod stelle;
