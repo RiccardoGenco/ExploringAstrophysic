@@ -859,13 +859,13 @@ mod prove {
         let mut s = Simulatore::nuovo();
         apri(&mut s, Stanza::Neutroni);
         assert!(s.stato.stanza == Stanza::Neutroni);
-        s.muovi(1218.0, 330.0);
-        s.bottone(1218.0, 330.0, PointerButton::Primary, true);
+        s.muovi(1270.0, 80.0);
+        s.bottone(1270.0, 80.0, PointerButton::Primary, true);
         for _ in 0..900 {
             s.stato.avanza(1.0 / 60.0);
             s.giro();
         }
-        s.bottone(1218.0, 330.0, PointerButton::Primary, false);
+        s.bottone(1270.0, 80.0, PointerButton::Primary, false);
         assert!(s.stato.neutroni.e_buco_nero());
     }
 
